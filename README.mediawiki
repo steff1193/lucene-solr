@@ -1,0 +1,32 @@
+'''This project contains miscellaneous improvements to Apache Lucene & Solr - currently only Solr'''
+* New features
+* Performance improvements
+* etc
+
+'''This is in no way an attempt to be a rivaling project to Apache Solr'''. It is just that 2 years of trying to make serious contributions to Apache Solr, has made me realize that it is very hard to have major contributions committed at Apache Solr. Seems that there are no Apache Solr committers really taking the time to help getting the contributions from non-committers committed. Therefore in practice I have experienced that major (> 20 lines of code) changes ends up never getting committed
+
+'''This is just an attempt to make our non-committed contributions available to others'''. We would rather succeed getting our improvements committed at Apache Solr. Feel free to fork and make pull requests, if you also have trouble getting your contributions committed at Apache Solr, or if you just want to participate for other reasons.
+
+'''NO WARRANTY!!!''' Not on code, binaries or anything else.
+
+The following '''branches point to code containing the improvements''' (the rest of the branches are just replica of Apache branches)
+* ''my_lucene_solr_4_4_0'': Release/tag lucene_solr_4_4_0 from Apache plus all current improvements
+
+The following tags point to '''released code containing the improvements''' (the rest of the branches are just replica of Apache branches)
+* ''Currently none''
+
+'''List of improvements'''
+* Support for optimistic locking - the cool solution ([https://issues.apache.org/jira/browse/SOLR-3173 SOLR-3173], [https://issues.apache.org/jira/browse/SOLR-3178 SOLR-3178] and [https://issues.apache.org/jira/browse/SOLR-3382 SOLR-3382])
+** Typed exceptions (VersionConflict, DocAlredyExists and DocDoesNotExist) propagated to SolrJ client
+** Support for separate results/exceptions for each individual document to be added/updated/deleted in multi-document update requests, so that some can fail with (different) optimistic locking exceptions while others succeed
+** Easy backward compatibility (to the update semantics that Solr had before 4.0)
+** etc.
+* Security
+** Support for basic http auth in internal solr requests ([https://issues.apache.org/jira/browse/SOLR-4470 SOLR-4470])
+** Support for protecting content in ZK ([https://issues.apache.org/jira/browse/SOLR-4580 SOLR-4580])
+* Correctly routed realtime-get through CloudSolrServer ([https://issues.apache.org/jira/browse/SOLR-5360 SOLR-5360])
+* Slow response on facet search, lots of facets, asking for few facets in response ([https://issues.apache.org/jira/browse/SOLR-5444 SOLR-5444])
+* Lots of other improvements and cleanup
+
+For documentation see the descriptions on the Solr JIRA tickets pointed out above. Also feel free to e-mail a question to steff@designware.dk 
+
