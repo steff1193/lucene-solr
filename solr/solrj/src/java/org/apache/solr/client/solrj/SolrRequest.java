@@ -19,17 +19,22 @@ package org.apache.solr.client.solrj;
 
 import java.io.IOException;
 import java.io.Serializable;
+import java.lang.reflect.ParameterizedType;
 import java.util.Collection;
 
+import org.apache.solr.client.solrj.response.SolrResponseBase;
+import org.apache.solr.common.exceptions.PartialErrors;
 import org.apache.solr.common.params.SolrParams;
 import org.apache.solr.common.util.ContentStream;
+import org.apache.solr.common.util.NamedList;
+import org.apache.solr.security.AuthCredentials;
 
 /**
  * 
  *
  * @since solr 1.3
  */
-public abstract class SolrRequest implements Serializable
+public abstract class SolrRequest<RESPONSE extends SolrResponseBase> implements Serializable
 {
   public enum METHOD {
     GET,
@@ -41,6 +46,8 @@ public abstract class SolrRequest implements Serializable
 
   private ResponseParser responseParser;
   private StreamingResponseCallback callback;
+  private AuthCredentials authCredentials;
+  private boolean preemptiveAuthentication = true;
   
   //---------------------------------------------------------
   //---------------------------------------------------------
@@ -93,7 +100,59 @@ public abstract class SolrRequest implements Serializable
     this.callback = callback;
   }
   
+  public AuthCredentials getAuthCredentials() {
+    return authCredentials;
+  }
+
+  public void setAuthCredentials(AuthCredentials authCredentials) {
+    this.authCredentials = authCredentials;
+  }
+
+  public boolean getPreemptiveAuthentication() {
+    return preemptiveAuthentication;
+  }
+
+  public void setPreemptiveAuthentication(boolean preemptiveAuthentication) {
+    this.preemptiveAuthentication = preemptiveAuthentication;
+  }
+
   public abstract SolrParams getParams();
   public abstract Collection<ContentStream> getContentStreams() throws IOException;
-  public abstract SolrResponse process( SolrServer server ) throws SolrServerException, IOException;
+  
+  public RESPONSE getResponse(NamedList<Object> res , SolrServer solrServer) {
+    Class<?> directSolrRequestSubclass = getClass();
+    while (!directSolrRequestSubclass.getSuperclass().equals(SolrRequest.class)) directSolrRequestSubclass = directSolrRequestSubclass.getSuperclass();
+    Class<? extends SolrResponseBase> responseClass = (Class<? extends SolrResponseBase>)((ParameterizedType)directSolrRequestSubclass.getGenericSuperclass()).getActualTypeArguments()[0];
+
+    try {
+      return (RESPONSE)responseClass.getConstructor().newInstance();
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+  }
+  
+  @SuppressWarnings("unchecked")
+  public RESPONSE process( SolrServer server ) throws SolrServerException, IOException
+  {
+    
+		PartialErrors peToBeThrown = null;
+    long startTime = System.currentTimeMillis();
+    NamedList<Object> genericResponse;
+    try {
+    	genericResponse = server.request(this);
+    } catch (PartialErrors pe) {
+    	genericResponse = pe.getPayload();
+    	peToBeThrown = pe;
+    }
+    RESPONSE res = getResponse(genericResponse, server);
+    res.setResponse(genericResponse);
+    res.setElapsedTime( System.currentTimeMillis()-startTime );
+    
+    if (peToBeThrown != null) {
+    	peToBeThrown.setSpecializedResponse(res);
+    	throw peToBeThrown;
+    }
+    
+    return (RESPONSE) res;
+  }
 }

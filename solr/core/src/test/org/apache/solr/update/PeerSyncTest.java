@@ -31,6 +31,8 @@ import org.apache.solr.common.util.StrUtils;
 import static org.apache.solr.update.processor.DistributingUpdateProcessorFactory.DISTRIB_UPDATE_PARAM;
 import static org.apache.solr.update.processor.DistributedUpdateProcessor.DistribPhase;
 
+import static org.apache.solr.client.solrj.embedded.JettySolrRunner.*;
+
 public class PeerSyncTest extends BaseDistributedSearchTestCase {
   private static int numVersions = 100;  // number of versions to use when syncing
   private final String FROM_LEADER = DistribPhase.FROMLEADER.toString();
@@ -59,7 +61,6 @@ public class PeerSyncTest extends BaseDistributedSearchTestCase {
 
     SolrServer client0 = clients.get(0);
     SolrServer client1 = clients.get(1);
-    SolrServer client2 = clients.get(2);
 
     long v = 0;
     add(client0, seenLeader, sdoc("id","1","_version_",++v));
@@ -75,14 +76,18 @@ public class PeerSyncTest extends BaseDistributedSearchTestCase {
     assertSync(client1, numVersions, true, shardsArr[0]);
     // TODO: test that updates weren't necessary
 
-    client0.commit(); client1.commit(); queryAndCompare(params("q", "*:*"), client0, client1);
+    client0.commit(true, true, false, UPDATE_CREDENTIALS); 
+    client1.commit(true, true, false, UPDATE_CREDENTIALS); 
+    queryAndCompare(params("q", "*:*"), client0, client1);
 
     add(client0, seenLeader, addRandFields(sdoc("id","2","_version_",++v)));
 
     // now client1 has the context to sync
     assertSync(client1, numVersions, true, shardsArr[0]);
 
-    client0.commit(); client1.commit(); queryAndCompare(params("q", "*:*"), client0, client1);
+    client0.commit(true, true, false, UPDATE_CREDENTIALS); 
+    client1.commit(true, true, false, UPDATE_CREDENTIALS); 
+    queryAndCompare(params("q", "*:*"), client0, client1);
 
     add(client0, seenLeader, addRandFields(sdoc("id","3","_version_",++v)));
     add(client0, seenLeader, addRandFields(sdoc("id","4","_version_",++v)));
@@ -95,7 +100,9 @@ public class PeerSyncTest extends BaseDistributedSearchTestCase {
 
     assertSync(client1, numVersions, true, shardsArr[0]);
 
-    client0.commit(); client1.commit(); queryAndCompare(params("q", "*:*"), client0, client1);
+    client0.commit(true, true, false, UPDATE_CREDENTIALS); 
+    client1.commit(true, true, false, UPDATE_CREDENTIALS); 
+    queryAndCompare(params("q", "*:*"), client0, client1);
 
     int toAdd = (int)(numVersions *.95);
     for (int i=0; i<toAdd; i++) {
@@ -112,7 +119,9 @@ public class PeerSyncTest extends BaseDistributedSearchTestCase {
     }
 
     assertSync(client1, numVersions, true, shardsArr[0]);
-    client0.commit(); client1.commit(); queryAndCompare(params("q", "*:*", "sort","_version_ desc"), client0, client1);
+    client0.commit(true, true, false, UPDATE_CREDENTIALS); 
+    client1.commit(true, true, false, UPDATE_CREDENTIALS); 
+    queryAndCompare(params("q", "*:*", "sort","_version_ desc"), client0, client1);
 
     // test delete and deleteByQuery
     v=1000;
@@ -123,7 +132,9 @@ public class PeerSyncTest extends BaseDistributedSearchTestCase {
     del(client0, params(DISTRIB_UPDATE_PARAM,FROM_LEADER,"_version_",Long.toString(-++v)), "1000");
 
     assertSync(client1, numVersions, true, shardsArr[0]);
-    client0.commit(); client1.commit(); queryAndCompare(params("q", "*:*", "sort","_version_ desc"), client0, client1);
+    client0.commit(true, true, false, UPDATE_CREDENTIALS); 
+    client1.commit(true, true, false, UPDATE_CREDENTIALS); 
+    queryAndCompare(params("q", "*:*", "sort","_version_ desc"), client0, client1);
 
     // test that delete by query is returned even if not requested, and that it doesn't delete newer stuff than it should
     v=2000;
@@ -144,7 +155,9 @@ public class PeerSyncTest extends BaseDistributedSearchTestCase {
     del(client, params(DISTRIB_UPDATE_PARAM,FROM_LEADER,"_version_",Long.toString(-++v)), "2000");
 
     assertSync(client1, numVersions, true, shardsArr[0]);
-    client0.commit(); client1.commit(); queryAndCompare(params("q", "*:*", "sort","_version_ desc"), client0, client1);
+    client0.commit(true, true, false, UPDATE_CREDENTIALS); 
+    client1.commit(true, true, false, UPDATE_CREDENTIALS); 
+    queryAndCompare(params("q", "*:*", "sort","_version_ desc"), client0, client1);
 
 
     //
@@ -168,12 +181,15 @@ public class PeerSyncTest extends BaseDistributedSearchTestCase {
     add(client1, seenLeader, sdoc("id","3002","_version_",3005));
 
     assertSync(client1, numVersions, true, shardsArr[0]);
-    client0.commit(); client1.commit(); queryAndCompare(params("q", "*:*", "sort","_version_ desc"), client0, client1);
+    client0.commit(true, true, false, UPDATE_CREDENTIALS); 
+    client1.commit(true, true, false, UPDATE_CREDENTIALS); 
+    queryAndCompare(params("q", "*:*", "sort","_version_ desc"), client0, client1);
   }
 
 
   void assertSync(SolrServer server, int numVersions, boolean expectedResult, String... syncWith) throws IOException, SolrServerException {
     QueryRequest qr = new QueryRequest(params("qt","/get", "getVersions",Integer.toString(numVersions), "sync", StrUtils.join(Arrays.asList(syncWith), ',')));
+    qr.setAuthCredentials(SEARCH_CREDENTIALS);
     NamedList rsp = server.request(qr);
     assertEquals(expectedResult, (Boolean) rsp.get("sync"));
   }

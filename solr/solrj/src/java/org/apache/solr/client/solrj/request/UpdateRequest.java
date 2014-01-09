@@ -44,7 +44,7 @@ public class UpdateRequest extends AbstractUpdateRequest {
 
   public UpdateRequest()
   {
-    super( METHOD.POST, "/update" );
+    this("/update");
   }
 
   public UpdateRequest(String url) {

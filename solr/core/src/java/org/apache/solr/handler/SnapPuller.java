@@ -95,6 +95,7 @@ import org.apache.solr.handler.ReplicationHandler.FileInfo;
 import org.apache.solr.request.LocalSolrQueryRequest;
 import org.apache.solr.request.SolrQueryRequest;
 import org.apache.solr.search.SolrIndexSearcher;
+import org.apache.solr.security.InterSolrNodeAuthCredentialsFactory.AuthCredentialsSource;
 import org.apache.solr.update.CommitUpdateCommand;
 import org.apache.solr.util.DefaultSolrThreadFactory;
 import org.apache.solr.util.FileUtils;
@@ -164,24 +165,24 @@ public class SnapPuller {
   // HttpClient for this instance if connectionTimeout or readTimeout has been specified
   private final HttpClient myHttpClient;
 
-  private static synchronized HttpClient createHttpClient(String connTimeout, String readTimeout, String httpBasicAuthUser, String httpBasicAuthPassword, boolean useCompression) {
+  private final AuthCredentialsSource authCredentialsSource;
+
+  private static synchronized HttpClient createHttpClient(String connTimeout, String readTimeout, AuthCredentialsSource authCredentialsSource, boolean useCompression) {
     if (connTimeout == null && readTimeout == null && client != null)  return client;
     final ModifiableSolrParams httpClientParams = new ModifiableSolrParams();
     httpClientParams.set(HttpClientUtil.PROP_CONNECTION_TIMEOUT, connTimeout != null ? connTimeout : "5000");
     httpClientParams.set(HttpClientUtil.PROP_SO_TIMEOUT, readTimeout != null ? readTimeout : "20000");
-    httpClientParams.set(HttpClientUtil.PROP_BASIC_AUTH_USER, httpBasicAuthUser);
-    httpClientParams.set(HttpClientUtil.PROP_BASIC_AUTH_PASS, httpBasicAuthPassword);
     httpClientParams.set(HttpClientUtil.PROP_ALLOW_COMPRESSION, useCompression);
     // Keeping a very high number so that if you have a large number of cores
     // no requests are kept waiting for an idle connection.
     httpClientParams.set(HttpClientUtil.PROP_MAX_CONNECTIONS, 10000);
     httpClientParams.set(HttpClientUtil.PROP_MAX_CONNECTIONS_PER_HOST, 10000);
-    HttpClient httpClient = HttpClientUtil.createClient(httpClientParams);
+    HttpClient httpClient = HttpClientUtil.createClient(httpClientParams, authCredentialsSource.getAuthCredentials()); 
     if (client == null && connTimeout == null && readTimeout == null) client = httpClient;
     return httpClient;
   }
 
-  public SnapPuller(final NamedList initArgs, final ReplicationHandler handler, final SolrCore sc) {
+  public SnapPuller(final NamedList initArgs, final ReplicationHandler handler, final SolrCore sc, AuthCredentialsSource authCredentialsSource) {
     solrCore = sc;
     final SolrParams params = SolrParams.toSolrParams(initArgs);
     String masterUrl = (String) initArgs.get(MASTER_URL);
@@ -202,9 +203,8 @@ public class SnapPuller {
     useExternal = EXTERNAL.equals(compress);
     String connTimeout = (String) initArgs.get(HttpClientUtil.PROP_CONNECTION_TIMEOUT);
     String readTimeout = (String) initArgs.get(HttpClientUtil.PROP_SO_TIMEOUT);
-    String httpBasicAuthUser = (String) initArgs.get(HttpClientUtil.PROP_BASIC_AUTH_USER);
-    String httpBasicAuthPassword = (String) initArgs.get(HttpClientUtil.PROP_BASIC_AUTH_PASS);
-    myHttpClient = createHttpClient(connTimeout, readTimeout, httpBasicAuthUser, httpBasicAuthPassword, useExternal);
+    myHttpClient = createHttpClient(connTimeout, readTimeout, authCredentialsSource, useExternal);
+    this.authCredentialsSource = authCredentialsSource;
     if (pollInterval != null && pollInterval > 0) {
       startExecutorService();
     } else {
@@ -223,7 +223,7 @@ public class SnapPuller {
         try {
           LOG.debug("Polling for index modifications");
           executorStartTime = System.currentTimeMillis();
-          replicationHandler.doFetch(null, false);
+          replicationHandler.doFetch(null, false, authCredentialsSource);
         } catch (Exception e) {
           LOG.error("Exception in fetching index", e);
         }

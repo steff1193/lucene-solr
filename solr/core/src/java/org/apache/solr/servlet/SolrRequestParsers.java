@@ -21,6 +21,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.nio.charset.Charset;
@@ -30,24 +31,30 @@ import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.servlet.ServletRequest;
 import javax.servlet.http.HttpServletRequest;
 
 import org.apache.commons.fileupload.FileItem;
 import org.apache.commons.fileupload.disk.DiskFileItemFactory;
 import org.apache.commons.fileupload.servlet.ServletFileUpload;
 import org.apache.lucene.util.IOUtils;
+import org.apache.commons.lang.StringUtils;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.SolrException.ErrorCode;
 import org.apache.solr.common.params.CommonParams;
 import org.apache.solr.common.params.MultiMapSolrParams;
 import org.apache.solr.common.params.SolrParams;
+import org.apache.solr.common.util.Base64;
 import org.apache.solr.common.util.ContentStream;
 import org.apache.solr.common.util.ContentStreamBase;
 import org.apache.solr.common.util.FastInputStream;
@@ -55,6 +62,9 @@ import org.apache.solr.core.Config;
 import org.apache.solr.core.SolrCore;
 import org.apache.solr.request.SolrQueryRequest;
 import org.apache.solr.request.SolrQueryRequestBase;
+import org.apache.solr.security.AuthCredentials;
+import org.apache.solr.security.AuthCredentials.AbstractAuthMethod;
+import org.apache.solr.security.AuthCredentials.BasicHttpAuth;
 
 
 public class SolrRequestParsers 
@@ -141,7 +151,7 @@ public class SolrRequestParsers
     // Pick the parser from the request...
     ArrayList<ContentStream> streams = new ArrayList<ContentStream>(1);
     SolrParams params = parser.parseParamsAndFillStreams( req, streams );
-    SolrQueryRequest sreq = buildRequestFrom( core, params, streams );
+    SolrQueryRequest sreq = buildRequestFrom( core, params, streams, createAuthCredentialsFromServletRequest(req) );
 
     // Handlers and login will want to know the path. If it contains a ':'
     // the handler could use it for RESTful URLs
@@ -154,6 +164,11 @@ public class SolrRequestParsers
   }
   
   public SolrQueryRequest buildRequestFrom( SolrCore core, SolrParams params, Collection<ContentStream> streams ) throws Exception
+  {
+    return buildRequestFrom(core, params, streams, null);
+  }
+  
+  public SolrQueryRequest buildRequestFrom( SolrCore core, SolrParams params, Collection<ContentStream> streams, AuthCredentials authCredentials ) throws Exception
   {
     // The content type will be applied to all streaming content
     String contentType = params.get( CommonParams.STREAM_CONTENTTYPE );
@@ -200,11 +215,32 @@ public class SolrRequestParsers
       }
     }
     
-    SolrQueryRequestBase q = new SolrQueryRequestBase( core, params ) { };
+    SolrQueryRequestBase q = new SolrQueryRequestBase( core, params, authCredentials) { };
     if( streams != null && streams.size() > 0 ) {
       q.setContentStreams( streams );
     }
     return q;
+  }
+  
+  public static AuthCredentials createAuthCredentialsFromServletRequest(ServletRequest request) {
+    Set<AbstractAuthMethod> authMethods = new HashSet<AbstractAuthMethod>();
+    if (request instanceof HttpServletRequest) {
+      String authCredentials;
+      if ((authCredentials = ((HttpServletRequest)request).getHeader("Authorization")) != null) {
+        if (authCredentials.startsWith("Basic")) {
+          String basicAuthCredentials = authCredentials.substring(authCredentials.lastIndexOf(" ") + 1);
+          byte[] decodedBasicAuthCredentialsByteArray = Base64.base64ToByteArray(basicAuthCredentials);
+          try {
+            String decodedBasicAuthCredentials = new String(decodedBasicAuthCredentialsByteArray, "UTF-8");
+            String[] split = StringUtils.split(decodedBasicAuthCredentials, ":");
+            authMethods.add(new BasicHttpAuth(split[0], split[1]));
+          } catch (UnsupportedEncodingException e) {
+            throw new RuntimeException(e);
+          }
+        }
+      }
+    }
+    return new AuthCredentials(authMethods);
   }
   
   /**

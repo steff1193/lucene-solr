@@ -17,6 +17,8 @@
 
 package org.apache.solr.cloud.hdfs;
 
+import static org.apache.solr.client.solrj.embedded.JettySolrRunner.ALL_CREDENTIALS;
+
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
@@ -27,6 +29,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.apache.lucene.util.LuceneTestCase.Slow;
 import org.apache.solr.client.solrj.SolrQuery;
+import org.apache.solr.client.solrj.SolrRequest.METHOD;
 import org.apache.solr.client.solrj.request.QueryRequest;
 import org.apache.solr.cloud.BasicDistributedZkTest;
 import org.apache.solr.common.params.CollectionParams.CollectionAction;
@@ -83,7 +86,7 @@ public class BasicHdfsTest extends BasicDistributedZkTest {
     cloudClient.setDefaultCollection("delete_data_dir");
     cloudClient.getZkStateReader().updateClusterState(true);
     NamedList<Object> response = cloudClient.query(
-        new SolrQuery().setRequestHandler("/admin/system")).getResponse();
+        new SolrQuery().setRequestHandler("/admin/system"), METHOD.GET, ALL_CREDENTIALS).getResponse();
     NamedList<Object> coreInfo = (NamedList<Object>) response.get("core");
     String dataDir = (String) ((NamedList<Object>) coreInfo.get("directory"))
         .get("data");
@@ -93,6 +96,7 @@ public class BasicHdfsTest extends BasicDistributedZkTest {
     params.set("name", "delete_data_dir");
     QueryRequest request = new QueryRequest(params);
     request.setPath("/admin/collections");
+    request.setAuthCredentials(ALL_CREDENTIALS);
     cloudClient.request(request);
     
     Configuration conf = new Configuration();

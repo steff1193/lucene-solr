@@ -25,6 +25,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.solr.BaseDistributedSearchTestCase;
 import org.apache.solr.client.solrj.SolrQuery;
+import org.apache.solr.client.solrj.SolrRequest.METHOD;
 import org.apache.solr.client.solrj.SolrServer;
 import org.apache.solr.client.solrj.embedded.JettySolrRunner;
 import org.apache.solr.client.solrj.impl.HttpSolrServer;
@@ -40,10 +41,14 @@ import org.apache.solr.core.SolrCore;
 import org.apache.solr.core.SolrEventListener;
 import org.apache.solr.search.SolrIndexSearcher;
 import org.apache.solr.servlet.SolrDispatchFilter;
+import org.apache.solr.request.SolrQueryRequestBase;
+import org.apache.solr.security.InterSolrNodeAuthCredentialsFactory.AuthCredentialsSource;
 import org.apache.solr.update.SolrCmdDistributor.Node;
 import org.apache.solr.update.SolrCmdDistributor.Response;
 import org.apache.solr.update.SolrCmdDistributor.StdNode;
 import org.apache.solr.update.processor.DistributedUpdateProcessor;
+
+import static org.apache.solr.client.solrj.embedded.JettySolrRunner.*;
 
 public class SolrCmdDistributorTest extends BaseDistributedSearchTestCase {
   private UpdateShardHandler updateShardHandler;
@@ -88,11 +93,19 @@ public class SolrCmdDistributorTest extends BaseDistributedSearchTestCase {
     shards = sb.toString();
   }
   
+  private static final AuthCredentialsSource updateAuthCredentialsSource;
+  static {
+    updateAuthCredentialsSource = AuthCredentialsSource.useAuthCredentialsFromOuterRequest(
+      new SolrQueryRequestBase(null, null, UPDATE_CREDENTIALS) {
+      }
+    );
+  }
+  
   @Override
   public void doTest() throws Exception {
     del("*:*");
     
-    SolrCmdDistributor cmdDistrib = new SolrCmdDistributor(5, updateShardHandler);
+    SolrCmdDistributor cmdDistrib = new SolrCmdDistributor(5, updateShardHandler, updateAuthCredentialsSource);
     
     ModifiableSolrParams params = new ModifiableSolrParams();
 
@@ -122,7 +135,7 @@ public class SolrCmdDistributorTest extends BaseDistributedSearchTestCase {
     
     assertEquals(response.errors.toString(), 0, response.errors.size());
     
-    long numFound = controlClient.query(new SolrQuery("*:*")).getResults()
+    long numFound = controlClient.query(new SolrQuery("*:*"), METHOD.GET, SEARCH_CREDENTIALS).getResults()
         .getNumFound();
     assertEquals(1, numFound);
     
@@ -132,7 +145,7 @@ public class SolrCmdDistributorTest extends BaseDistributedSearchTestCase {
     nodes.add(new StdNode(new ZkCoreNodeProps(nodeProps)));
     
     // add another 2 docs to control and 3 to client
-    cmdDistrib = new SolrCmdDistributor(5, updateShardHandler);
+    cmdDistrib = new SolrCmdDistributor(5, updateShardHandler, updateAuthCredentialsSource);
     cmd.solrDoc = sdoc("id", 2);
     params = new ModifiableSolrParams();
     params.set(DistributedUpdateProcessor.COMMIT_END_POINT, true);
@@ -160,11 +173,11 @@ public class SolrCmdDistributorTest extends BaseDistributedSearchTestCase {
     
     assertEquals(response.errors.toString(), 0, response.errors.size());
     
-    SolrDocumentList results = controlClient.query(new SolrQuery("*:*")).getResults();
+    SolrDocumentList results = controlClient.query(new SolrQuery("*:*"), METHOD.GET, SEARCH_CREDENTIALS).getResults();
     numFound = results.getNumFound();
     assertEquals(results.toString(), 3, numFound);
     
-    numFound = client.query(new SolrQuery("*:*")).getResults()
+    numFound = client.query(new SolrQuery("*:*"), METHOD.GET, SEARCH_CREDENTIALS).getResults()
         .getNumFound();
     assertEquals(3, numFound);
     
@@ -173,13 +186,10 @@ public class SolrCmdDistributorTest extends BaseDistributedSearchTestCase {
     DeleteUpdateCommand dcmd = new DeleteUpdateCommand(null);
     dcmd.id = "2";
     
-    
-
-    cmdDistrib = new SolrCmdDistributor(5, updateShardHandler);
+    cmdDistrib = new SolrCmdDistributor(5, updateShardHandler, updateAuthCredentialsSource);
     
     params = new ModifiableSolrParams();
     params.set(DistributedUpdateProcessor.COMMIT_END_POINT, true);
-    
     cmdDistrib.distribDelete(dcmd, nodes, params);
     
     params = new ModifiableSolrParams();
@@ -193,22 +203,22 @@ public class SolrCmdDistributorTest extends BaseDistributedSearchTestCase {
     assertEquals(response.errors.toString(), 0, response.errors.size());
     
     
-    results = controlClient.query(new SolrQuery("*:*")).getResults();
+    results = controlClient.query(new SolrQuery("*:*"), METHOD.GET, SEARCH_CREDENTIALS).getResults();
     numFound = results.getNumFound();
     assertEquals(results.toString(), 2, numFound);
     
-    numFound = client.query(new SolrQuery("*:*")).getResults()
+    numFound = client.query(new SolrQuery("*:*"), METHOD.GET, SEARCH_CREDENTIALS).getResults()
         .getNumFound();
     assertEquals(results.toString(), 2, numFound);
     
     for (SolrServer c : clients) {
-      c.optimize();
+      c.optimize(true, true, 1, UPDATE_CREDENTIALS);
       //System.out.println(clients.get(0).request(new LukeRequest()));
     }
     
     int id = 5;
     
-    cmdDistrib = new SolrCmdDistributor(5, updateShardHandler);
+    cmdDistrib = new SolrCmdDistributor(5, updateShardHandler, updateAuthCredentialsSource);
     
     int cnt = atLeast(303);
     for (int i = 0; i < cnt; i++) {
@@ -273,7 +283,9 @@ public class SolrCmdDistributorTest extends BaseDistributedSearchTestCase {
     assertEquals(shardCount, commits.get());
     
     for (SolrServer c : clients) {
-      NamedList<Object> resp = c.request(new LukeRequest());
+      LukeRequest req = new LukeRequest();
+      req.setAuthCredentials(ALL_CREDENTIALS);
+      NamedList<Object> resp = c.request(req);
       assertEquals("SOLR-3428: We only did adds - there should be no deletes",
           ((NamedList<Object>) resp.get("index")).get("numDocs"),
           ((NamedList<Object>) resp.get("index")).get("maxDoc"));

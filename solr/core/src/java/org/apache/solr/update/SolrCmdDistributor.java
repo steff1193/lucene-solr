@@ -17,6 +17,8 @@ package org.apache.solr.update;
  * limitations under the License.
  */
 
+import static org.apache.solr.update.processor.DistributingUpdateProcessorFactory.DISTRIB_UPDATE_PARAM;
+
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -42,9 +44,13 @@ import org.apache.solr.common.params.ModifiableSolrParams;
 import org.apache.solr.common.util.NamedList;
 import org.apache.solr.core.Diagnostics;
 import org.apache.solr.core.SolrCore;
+import org.apache.solr.security.InterSolrNodeAuthCredentialsFactory.AuthCredentialsSource;
+import org.apache.solr.update.processor.DistributedUpdateProcessor.DistribPhase;
 import org.apache.solr.util.AdjustableSemaphore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+
 
 
 public class SolrCmdDistributor {
@@ -64,6 +70,7 @@ public class SolrCmdDistributor {
   private final Map<Node,List<AddRequest>> adds = new HashMap<Node,List<AddRequest>>();
   private final Map<Node,List<DeleteRequest>> deletes = new HashMap<Node,List<DeleteRequest>>();
   private UpdateShardHandler updateShardHandler;
+  private AuthCredentialsSource authCredentialsSource;
   
   class AddRequest {
     AddUpdateCommand cmd;
@@ -79,7 +86,7 @@ public class SolrCmdDistributor {
     public boolean abortCheck();
   }
   
-  public SolrCmdDistributor(int numHosts, UpdateShardHandler updateShardHandler) {
+  public SolrCmdDistributor(int numHosts, UpdateShardHandler updateShardHandler, AuthCredentialsSource authCredentialsSource) {
     int maxPermits = Math.max(16, numHosts * 16);
     // limits how many tasks can actually execute at once
     if (maxPermits != semaphore.getMaxPermits()) {
@@ -89,10 +96,12 @@ public class SolrCmdDistributor {
     this.updateShardHandler = updateShardHandler;
     completionService = new ExecutorCompletionService<Request>(updateShardHandler.getCmdDistribExecutor());
     pending = new HashSet<Future<Request>>();
+    this.authCredentialsSource = authCredentialsSource;
   }
   
   public void finish() {
 
+    // piggyback on any outstanding adds or deletes if possible.
     flushAdds(1);
     flushDeletes(1);
 
@@ -121,8 +130,9 @@ public class SolrCmdDistributor {
 
     clone.solrDoc = cmd.solrDoc;
     clone.commitWithin = cmd.commitWithin;
-    clone.overwrite = cmd.overwrite;
+    clone.classicOverwrite = cmd.classicOverwrite;
     clone.setVersion(cmd.getVersion());
+    clone.setRequestVersion(cmd.getRequestVersion());
     AddRequest addRequest = new AddRequest();
     addRequest.cmd = clone;
     addRequest.params = params;
@@ -153,7 +163,7 @@ public class SolrCmdDistributor {
     checkResponses(false);
 
     UpdateRequestExt ureq = new UpdateRequestExt();
-    ureq.add(cmd.solrDoc, cmd.commitWithin, cmd.overwrite);
+    ureq.add(cmd.solrDoc, cmd.commitWithin, cmd.classicOverwrite);
     ureq.setParams(params);
     syncRequest(node, ureq);
   }
@@ -189,6 +199,7 @@ public class SolrCmdDistributor {
     Request sreq = new Request();
     sreq.node = node;
     sreq.ureq = ureq;
+    sreq.ureq.setAuthCredentials(authCredentialsSource.getAuthCredentials());
 
     String url = node.getUrl();
     String fullUrl;
@@ -271,77 +282,125 @@ public class SolrCmdDistributor {
         : AbstractUpdateRequest.ACTION.COMMIT, false, cmd.waitSearcher, cmd.maxOptimizeSegments, cmd.softCommit, cmd.expungeDeletes);
   }
   
-  boolean flushAdds(int limit) {
+  void flushAdds(int limit) {
     // check for pending deletes
   
     Set<Node> removeNodes = new HashSet<Node>();
     Set<Node> nodes = adds.keySet();
  
+    try {
     for (Node node : nodes) {
       List<AddRequest> alist = adds.get(node);
       if (alist == null || alist.size() < limit) continue;
   
-      UpdateRequestExt ureq = new UpdateRequestExt();
+        UpdateRequestExt leaderSeenUreq = new UpdateRequestExt();
+        UpdateRequestExt leaderNotSeenUreq = new UpdateRequestExt();
+        
+        ModifiableSolrParams leaderSeenCombinedParams = new ModifiableSolrParams();
+        ModifiableSolrParams leaderNotSeenCombinedParams = new ModifiableSolrParams();
       
-      ModifiableSolrParams combinedParams = new ModifiableSolrParams();
+        boolean leaderSeenRequestsSeen = false;
+        boolean leaderNotSeenRequestsSeen = false;
       
       for (AddRequest aReq : alist) {
         AddUpdateCommand cmd = aReq.cmd;
-        combinedParams.add(aReq.params);
        
-        ureq.add(cmd.solrDoc, cmd.commitWithin, cmd.overwrite);
+          DistribPhase phase = 
+            DistribPhase.parseParam(aReq.params.get(DISTRIB_UPDATE_PARAM));
+
+          if (DistribPhase.FROMLEADER == phase) {
+            leaderSeenCombinedParams.add(aReq.params);
+            leaderSeenUreq.add(cmd.solrDoc, cmd.commitWithin, cmd.classicOverwrite);
+            leaderSeenRequestsSeen = true;
+          } else {
+            leaderNotSeenCombinedParams.add(aReq.params);
+            leaderNotSeenUreq.add(cmd.solrDoc, cmd.commitWithin, cmd.classicOverwrite);
+            leaderNotSeenRequestsSeen = true;
+          }
       }
       
-      if (ureq.getParams() == null) ureq.setParams(new ModifiableSolrParams());
-      ureq.getParams().add(combinedParams);
+        if (leaderSeenRequestsSeen) {
+          if (leaderSeenUreq.getParams() == null) leaderSeenUreq.setParams(new ModifiableSolrParams());
+          leaderSeenUreq.getParams().add(leaderSeenCombinedParams);
+          submit(leaderSeenUreq, node);
+        }
+        if (leaderNotSeenRequestsSeen) {
+          if (leaderNotSeenUreq.getParams() == null) leaderNotSeenUreq.setParams(new ModifiableSolrParams());
+          leaderNotSeenUreq.getParams().add(leaderNotSeenCombinedParams);
+          submit(leaderNotSeenUreq, node);
+        }
 
       removeNodes.add(node);
-      
-      submit(ureq, node);
     }
-    
+    } finally {
     for (Node node : removeNodes) {
       adds.remove(node);
     }
-    
-    return true;
+    }
   }
   
-  boolean flushDeletes(int limit) {
+  void flushDeletes(int limit) {
     // check for pending deletes
  
     Set<Node> removeNodes = new HashSet<Node>();
     Set<Node> nodes = deletes.keySet();
+    try {
     for (Node node : nodes) {
       List<DeleteRequest> dlist = deletes.get(node);
       if (dlist == null || dlist.size() < limit) continue;
-      UpdateRequestExt ureq = new UpdateRequestExt();
       
-      ModifiableSolrParams combinedParams = new ModifiableSolrParams();
+        UpdateRequestExt leaderSeenUreq = new UpdateRequestExt();
+        UpdateRequestExt leaderNotSeenUreq = new UpdateRequestExt();
+        
+        ModifiableSolrParams leaderSeenCombinedParams = new ModifiableSolrParams();
+        ModifiableSolrParams leaderNotSeenCombinedParams = new ModifiableSolrParams();
+        
+        boolean leaderSeenRequestsSeen = false;
+        boolean leaderNotSeenRequestsSeen = false;
       
       for (DeleteRequest dReq : dlist) {
         DeleteUpdateCommand cmd = dReq.cmd;
-        combinedParams.add(dReq.params);
+          
+          DistribPhase phase = 
+            DistribPhase.parseParam(dReq.params.get(DISTRIB_UPDATE_PARAM));
+
+          if (DistribPhase.FROMLEADER == phase) {
+            leaderSeenCombinedParams.add(dReq.params);
         if (cmd.isDeleteById()) {
-          ureq.deleteById(cmd.getId(), cmd.getVersion());
+              leaderSeenUreq.deleteById(cmd.getId(), cmd.getVersion());
         } else {
-          ureq.deleteByQuery(cmd.query);
+              leaderSeenUreq.deleteByQuery(cmd.query);
+            }
+            leaderSeenRequestsSeen = true;
+          } else {
+            leaderNotSeenCombinedParams.add(dReq.params);
+            if (cmd.isDeleteById()) {
+              leaderNotSeenUreq.deleteById(cmd.getId(), cmd.getVersion());
+            } else {
+              leaderNotSeenUreq.deleteByQuery(cmd.query);
+            }
+            leaderNotSeenRequestsSeen = true;
+          }
         }
         
-        if (ureq.getParams() == null) ureq
-            .setParams(new ModifiableSolrParams());
-        ureq.getParams().add(combinedParams);
+        if (leaderSeenRequestsSeen) {
+          if (leaderSeenUreq.getParams() == null) leaderSeenUreq.setParams(new ModifiableSolrParams());
+          leaderSeenUreq.getParams().add(leaderSeenCombinedParams);
+          submit(leaderSeenUreq, node);
+        }
+        if (leaderNotSeenRequestsSeen) {
+          if (leaderNotSeenUreq.getParams() == null) leaderNotSeenUreq.setParams(new ModifiableSolrParams());
+          leaderNotSeenUreq.getParams().add(leaderNotSeenCombinedParams);
+          submit(leaderNotSeenUreq, node);
       }
       
       removeNodes.add(node);
-      submit(ureq, node);
     }
-    
+    } finally {
     for (Node node : removeNodes) {
       deletes.remove(node);
     }
-    
-    return true;
+    }    
   }
   
   private DeleteUpdateCommand clone(DeleteUpdateCommand cmd) {
@@ -349,12 +408,13 @@ public class SolrCmdDistributor {
     // TODO: shouldnt the clone do this?
     c.setFlags(cmd.getFlags());
     c.setVersion(cmd.getVersion());
+    c.setRequestVersion(cmd.getRequestVersion());
     return c;
   }
   
   public static class Request {
     public Node node;
-    UpdateRequestExt ureq;
+    public UpdateRequestExt ureq;
     NamedList<Object> ursp;
     int rspCode;
     public Exception exception;
@@ -380,6 +440,7 @@ public class SolrCmdDistributor {
           clonedRequest = new Request();
           clonedRequest.node = sreq.node;
           clonedRequest.ureq = sreq.ureq;
+          clonedRequest.ureq.setAuthCredentials(authCredentialsSource.getAuthCredentials());
           clonedRequest.retries = sreq.retries;
           
           String fullUrl;
@@ -414,6 +475,7 @@ public class SolrCmdDistributor {
         return clonedRequest;
       }
     };
+    
     try {
       semaphore.acquire();
     } catch (InterruptedException e) {
@@ -431,6 +493,11 @@ public class SolrCmdDistributor {
 
   public static Diagnostics.Callable testing_errorHook;  // called on error when forwarding request.  Currently data=[this, Request]
 
+  boolean exceptionWorthRetrying(Exception e) {
+    // No need to retry on partial error(s). 
+    return (!(e instanceof SolrException) || (((SolrException)e).worthRetrying()));
+  }
+
   void checkResponses(boolean block) {
 
     while (pending != null && pending.size() > 0) {
@@ -446,7 +513,7 @@ public class SolrCmdDistributor {
             // error during request
 
             if (testing_errorHook != null) Diagnostics.call(testing_errorHook, this, sreq);
-
+            Exception e = sreq.exception;
             // if there is a retry url, we want to retry...
             boolean isRetry = sreq.node.checkRetry();
             boolean doRetry = false;
@@ -469,7 +536,7 @@ public class SolrCmdDistributor {
               }
             }
             
-            if (isRetry && sreq.retries < MAX_RETRIES_ON_FORWARD && doRetry) {
+            if (isRetry && sreq.retries < MAX_RETRIES_ON_FORWARD && doRetry && exceptionWorthRetrying(e)) {
               sreq.retries++;
               sreq.rspCode = 0;
               sreq.exception = null;
@@ -477,7 +544,6 @@ public class SolrCmdDistributor {
               Thread.sleep(500);
               submit(sreq);
             } else {
-              Exception e = sreq.exception;
               Error error = new Error();
               error.e = e;
               error.node = sreq.node;

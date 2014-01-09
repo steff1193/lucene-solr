@@ -17,32 +17,23 @@ package org.apache.solr.cloud;
  * limitations under the License.
  */
 
-import org.apache.solr.client.solrj.SolrQuery;
-import org.apache.solr.client.solrj.SolrServer;
-import org.apache.solr.client.solrj.SolrServerException;
-import org.apache.solr.client.solrj.embedded.JettySolrRunner;
-import org.apache.solr.client.solrj.impl.CloudSolrServer;
-import org.apache.solr.client.solrj.request.UpdateRequest;
-import org.apache.solr.client.solrj.response.QueryResponse;
-import org.apache.solr.common.SolrDocument;
-import org.apache.solr.common.SolrException;
-import org.apache.solr.common.SolrInputDocument;
-import org.apache.solr.common.cloud.CompositeIdRouter;
-import org.apache.solr.common.cloud.ZkNodeProps;
-import org.apache.solr.common.cloud.ZkStateReader;
-import org.apache.solr.common.params.CommonParams;
-import org.apache.solr.common.params.ModifiableSolrParams;
-import org.apache.solr.common.params.ShardParams;
-import org.apache.solr.common.util.StrUtils;
-import org.apache.solr.servlet.SolrDispatchFilter;
-import org.apache.solr.update.DirectUpdateHandler2;
-import org.junit.BeforeClass;
-import org.junit.Ignore;
+import static org.apache.solr.client.solrj.embedded.JettySolrRunner.SEARCH_CREDENTIALS;
+import static org.apache.solr.client.solrj.embedded.JettySolrRunner.UPDATE_CREDENTIALS;
 
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+
+import org.apache.solr.client.solrj.SolrRequest.METHOD;
+import org.apache.solr.client.solrj.SolrServer;
+import org.apache.solr.client.solrj.embedded.JettySolrRunner;
+import org.apache.solr.client.solrj.request.UpdateRequest;
+import org.apache.solr.client.solrj.response.QueryResponse;
+import org.apache.solr.common.SolrDocument;
+import org.apache.solr.common.params.ShardParams;
+import org.apache.solr.common.util.StrUtils;
+import org.junit.BeforeClass;
 
 
 public class ShardRoutingTest extends AbstractFullDistribZkTestBase {
@@ -221,18 +212,18 @@ public class ShardRoutingTest extends AbstractFullDistribZkTestBase {
     }
 
     long nStart = getNumRequests();
-    leader.client.solrClient.add( sdoc("id","b!doc1") );
+    leader.client.solrClient.add( sdoc("id","b!doc1"), -1, UPDATE_CREDENTIALS );
     long nEnd = getNumRequests();
     assertEquals(2, nEnd - nStart);   // one request to leader, which makes another to a replica
 
 
     nStart = getNumRequests();
-    replica.client.solrClient.add( sdoc("id","b!doc1") );
+    replica.client.solrClient.add( sdoc("id","b!doc1"), -1, UPDATE_CREDENTIALS );
     nEnd = getNumRequests();
     assertEquals(3, nEnd - nStart);   // orig request + replica forwards to leader, which forward back to replica.
 
     nStart = getNumRequests();
-    replica.client.solrClient.add( sdoc("id","b!doc1") );
+    replica.client.solrClient.add( sdoc("id","b!doc1"), -1, UPDATE_CREDENTIALS );
     nEnd = getNumRequests();
     assertEquals(3, nEnd - nStart);   // orig request + replica forwards to leader, which forward back to replica.
 
@@ -240,27 +231,27 @@ public class ShardRoutingTest extends AbstractFullDistribZkTestBase {
 
 
     nStart = getNumRequests();
-    replica.client.solrClient.query( params("q","*:*", "shards",bucket1) );
+    replica.client.solrClient.query( params("q","*:*", "shards",bucket1), METHOD.GET, SEARCH_CREDENTIALS );
     nEnd = getNumRequests();
     assertEquals(1, nEnd - nStart);   // short circuit should prevent distrib search
 
     nStart = getNumRequests();
-    replica.client.solrClient.query( params("q","*:*", "shard.keys","b!") );
+    replica.client.solrClient.query( params("q","*:*", "shard.keys","b!"), METHOD.GET, SEARCH_CREDENTIALS );
     nEnd = getNumRequests();
     assertEquals(1, nEnd - nStart);   // short circuit should prevent distrib search
 
     nStart = getNumRequests();
-    leader2.client.solrClient.query( params("q","*:*", "shard.keys","b!") );
+    leader2.client.solrClient.query( params("q","*:*", "shard.keys","b!"), METHOD.GET, SEARCH_CREDENTIALS );
     nEnd = getNumRequests();
     assertEquals(3, nEnd - nStart);   // original + 2 phase distrib search.  we could improve this!
 
     nStart = getNumRequests();
-    leader2.client.solrClient.query( params("q","*:*") );
+    leader2.client.solrClient.query( params("q","*:*"), METHOD.GET, SEARCH_CREDENTIALS );
     nEnd = getNumRequests();
     assertEquals(9, nEnd - nStart);   // original + 2 phase distrib search * 4 shards.
 
     nStart = getNumRequests();
-    leader2.client.solrClient.query( params("q","*:*", "shard.keys","b!,d!") );
+    leader2.client.solrClient.query( params("q","*:*", "shard.keys","b!,d!"), METHOD.GET, SEARCH_CREDENTIALS );
     nEnd = getNumRequests();
     assertEquals(5, nEnd - nStart);   // original + 2 phase distrib search * 2 shards.
   }
@@ -272,10 +263,10 @@ public class ShardRoutingTest extends AbstractFullDistribZkTestBase {
 
     int expectedVal = 0;
     for (SolrServer client : clients) {
-      client.add(sdoc("id", "b!doc", "foo_i", map("inc",1)));
+      client.add(sdoc("id", "b!doc", "foo_i", map("inc",1)), -1, UPDATE_CREDENTIALS);
       expectedVal++;
 
-      QueryResponse rsp = client.query(params("qt","/get", "id","b!doc"));
+      QueryResponse rsp = client.query(params("qt","/get", "id","b!doc"), METHOD.GET, SEARCH_CREDENTIALS);
       Object val = ((Map)rsp.getResponse().get("doc")).get("foo_i");
       assertEquals((Integer)expectedVal, val);
     }
@@ -299,7 +290,7 @@ public class ShardRoutingTest extends AbstractFullDistribZkTestBase {
   void doQuery(String expectedDocs, String... queryParams) throws Exception {
     Set<String> expectedIds = new HashSet<String>( StrUtils.splitSmart(expectedDocs, ",", true) );
 
-    QueryResponse rsp = cloudClient.query(params(queryParams));
+    QueryResponse rsp = cloudClient.query(params(queryParams), METHOD.GET, SEARCH_CREDENTIALS);
     Set<String> obtainedIds = new HashSet<String>();
     for (SolrDocument doc : rsp.getResults()) {
       obtainedIds.add((String) doc.get("id"));
@@ -309,11 +300,11 @@ public class ShardRoutingTest extends AbstractFullDistribZkTestBase {
   }
 
   void doRTG(String ids) throws Exception {
-    cloudClient.query(params("qt","/get", "ids",ids));
+    cloudClient.query(params("qt","/get", "ids",ids), METHOD.GET, SEARCH_CREDENTIALS);
 
     Set<String> expectedIds = new HashSet<String>( StrUtils.splitSmart(ids, ",", true) );
 
-    QueryResponse rsp = cloudClient.query(params("qt","/get", "ids",ids));
+    QueryResponse rsp = cloudClient.query(params("qt","/get", "ids",ids), METHOD.GET, SEARCH_CREDENTIALS);
     Set<String> obtainedIds = new HashSet<String>();
     for (SolrDocument doc : rsp.getResults()) {
       obtainedIds.add((String) doc.get("id"));
@@ -327,6 +318,7 @@ public class ShardRoutingTest extends AbstractFullDistribZkTestBase {
     UpdateRequest req = new UpdateRequest();
     req.deleteByQuery(q);
     req.setParams(params(reqParams));
+    req.setAuthCredentials(UPDATE_CREDENTIALS);
     req.process(cloudClient);
   }
 

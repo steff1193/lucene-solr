@@ -142,17 +142,18 @@ public class EmbeddedSolrServer extends SolrServer
 
     SolrQueryRequest req = null;
     try {
-      req = _parser.buildRequestFrom( core, params, request.getContentStreams() );
+      req = _parser.buildRequestFrom( core, params, request.getContentStreams(), request.getAuthCredentials() );
       req.getContext().put( "path", path );
       SolrQueryResponse rsp = new SolrQueryResponse();
       SolrRequestInfo.setRequestInfo(new SolrRequestInfo(req, rsp));
       
       core.execute( handler, req, rsp );
-      if( rsp.getException() != null ) {
-        if(rsp.getException() instanceof SolrException) {
-          throw rsp.getException();
+      Exception e;
+      if( (e = rsp.getException()) != null ) {
+        if(e instanceof SolrException) {
+          throw e;
         }
-        throw new SolrServerException( rsp.getException() );
+        throw new SolrServerException( e );
       }
       
       // Check if this should stream results

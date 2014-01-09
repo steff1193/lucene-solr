@@ -25,6 +25,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
 import org.apache.solr.client.solrj.SolrServerException;
+import org.apache.solr.client.solrj.impl.HttpClientUtil;
 import org.apache.solr.client.solrj.impl.HttpSolrServer;
 import org.apache.solr.client.solrj.request.AbstractUpdateRequest;
 import org.apache.solr.client.solrj.request.CoreAdminRequest.WaitForState;
@@ -48,6 +49,7 @@ import org.apache.solr.request.SolrQueryRequest;
 import org.apache.solr.request.SolrRequestHandler;
 import org.apache.solr.request.SolrRequestInfo;
 import org.apache.solr.response.SolrQueryResponse;
+import org.apache.solr.security.InterSolrNodeAuthCredentialsFactory.AuthCredentialsSource;
 import org.apache.solr.update.CommitUpdateCommand;
 import org.apache.solr.update.PeerSync;
 import org.apache.solr.update.UpdateLog;
@@ -138,18 +140,18 @@ public class RecoveryStrategy extends Thread implements ClosableThread {
     
     if (replicationHandler == null) {
       throw new SolrException(ErrorCode.SERVICE_UNAVAILABLE,
-          "Skipping recovery, no " + REPLICATION_HANDLER + " handler found");
+            "Skipping recovery, no " + REPLICATION_HANDLER + " handler found. core=" + coreName);
     }
     
     ModifiableSolrParams solrParams = new ModifiableSolrParams();
     solrParams.set(ReplicationHandler.MASTER_URL, leaderUrl);
     
     if (isClosed()) retries = INTERRUPTED;
-    boolean success = replicationHandler.doFetch(solrParams, false);
+      boolean success = replicationHandler.doFetch(solrParams, false, AuthCredentialsSource.useInternalAuthCredentials()); // TODO: look into making force=true not download files we already have?
     
     if (!success) {
       throw new SolrException(ErrorCode.SERVER_ERROR,
-          "Replication for recovery failed.");
+          "Replication for recovery failed. core=" + coreName);
     }
 
       // solrcloud_debug
@@ -165,11 +167,11 @@ public class RecoveryStrategy extends Thread implements ClosableThread {
 //      } catch (Exception e) {
 //        
 //      }
-    
   }
 
   private void commitOnLeader(String leaderUrl) throws SolrServerException, IOException {
     HttpSolrServer server = new HttpSolrServer(leaderUrl);
+    HttpClientUtil.setAuthCredentials(server.getHttpClient(), AuthCredentialsSource.useInternalAuthCredentials().getAuthCredentials());
     server.setConnectionTimeout(30000);
     server.setSoTimeout(60000);
     UpdateRequest ureq = new UpdateRequest();
@@ -185,6 +187,7 @@ public class RecoveryStrategy extends Thread implements ClosableThread {
       String leaderCoreName) throws SolrServerException,
       IOException {
     HttpSolrServer server = new HttpSolrServer(leaderBaseUrl);
+    HttpClientUtil.setAuthCredentials(server.getHttpClient(), AuthCredentialsSource.useInternalAuthCredentials().getAuthCredentials());
     server.setConnectionTimeout(45000);
     server.setSoTimeout(120000);
     WaitForState prepCmd = new WaitForState();
@@ -219,11 +222,11 @@ public class RecoveryStrategy extends Thread implements ClosableThread {
         doRecovery(core);
       }  catch (InterruptedException e) {
         Thread.currentThread().interrupt();
-        SolrException.log(log, "", e);
+        SolrException.log(log, "core=" + coreName, e);
         throw new ZooKeeperException(SolrException.ErrorCode.SERVER_ERROR, "",
             e);
       } catch (Throwable t) {
-        log.error("", t);
+        log.error("core=" + coreName, t);
         throw new ZooKeeperException(SolrException.ErrorCode.SERVER_ERROR,
             "", t);
       }
@@ -277,12 +280,12 @@ public class RecoveryStrategy extends Thread implements ClosableThread {
         }
         
         if (oldIdx > 0) {
-          log.info("####### Found new versions added after startup: num="
+          log.info("####### Found new versions added after startup: core=" + coreName + " num="
               + oldIdx);
-          log.info("###### currentVersions=" + recentVersions);
+          log.info("###### core=" + coreName + " currentVersions=" + recentVersions);
         }
         
-        log.info("###### startupVersions=" + startingVersions);
+        log.info("###### core=" + coreName + " startupVersions=" + startingVersions);
       } catch (Throwable t) {
         SolrException.log(log, "Error getting recent versions. core=" + coreName, t);
         recentVersions = new ArrayList<Long>(0);
@@ -358,8 +361,10 @@ public class RecoveryStrategy extends Thread implements ClosableThread {
           // + " i am:" + zkController.getNodeName());
           PeerSync peerSync = new PeerSync(core,
               Collections.singletonList(leaderUrl), ulog.numRecordsToKeep, false, false);
+          try {
           peerSync.setStartingVersions(recentVersions);
           boolean syncSuccess = peerSync.sync();
+            
           if (syncSuccess) {
             SolrQueryRequest req = new LocalSolrQueryRequest(core,
                 new ModifiableSolrParams());
@@ -392,6 +397,10 @@ public class RecoveryStrategy extends Thread implements ClosableThread {
           }
 
           log.info("PeerSync Recovery was not successful - trying replication. core=" + coreName);
+
+          } finally {
+            peerSync.close();
+          }
         }
 
         log.info("Starting Replication Recovery. core=" + coreName);
@@ -415,16 +424,16 @@ public class RecoveryStrategy extends Thread implements ClosableThread {
           recoveryListener.recovered();
         } catch (InterruptedException e) {
           Thread.currentThread().interrupt();
-          log.warn("Recovery was interrupted", e);
+          log.warn("Recovery was interrupted. core=" + coreName, e);
           retries = INTERRUPTED;
         } catch (Throwable t) {
-          SolrException.log(log, "Error while trying to recover", t);
+          SolrException.log(log, "Error while trying to recover. core=" + coreName, t);
         } finally {
           if (!replayed) {
             try {
               ulog.dropBufferedUpdates();
             } catch (Throwable t) {
-              SolrException.log(log, "", t);
+              SolrException.log(log, "core=" + coreName, t);
             }
           }
 

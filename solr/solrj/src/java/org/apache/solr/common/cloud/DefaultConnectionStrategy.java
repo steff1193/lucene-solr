@@ -21,6 +21,8 @@ import java.io.IOException;
 import java.util.concurrent.TimeoutException;
 
 import org.apache.solr.common.SolrException;
+import org.apache.solr.common.StringUtils;
+import org.apache.solr.common.cloud.ZkCredentialsProvider.ZkCredentials;
 import org.apache.zookeeper.Watcher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,9 +34,17 @@ public class DefaultConnectionStrategy extends ZkClientConnectionStrategy {
 
   private static Logger log = LoggerFactory.getLogger(DefaultConnectionStrategy.class);
   
+  private ZkCredentialsProvider zkCredentialsToAddAutomatically;
+  private boolean zkCredentialsToAddAutomaticallyUsed;
+
+  public DefaultConnectionStrategy() {
+    zkCredentialsToAddAutomatically = createZkCredentialsToAddAutomatically();
+    zkCredentialsToAddAutomaticallyUsed = false;
+  }
+
   @Override
   public void connect(String serverAddress, int timeout, Watcher watcher, ZkUpdate updater) throws IOException, InterruptedException, TimeoutException {
-    updater.update(new SolrZooKeeper(serverAddress, timeout, watcher));
+    updater.update(createSolrZooKeeper(serverAddress, timeout, watcher));
   }
 
   @Override
@@ -44,7 +54,7 @@ public class DefaultConnectionStrategy extends ZkClientConnectionStrategy {
     
     try {
       updater
-          .update(new SolrZooKeeper(serverAddress, zkClientTimeout, watcher));
+          .update(createSolrZooKeeper(serverAddress, zkClientTimeout, watcher));
       log.info("Reconnected to ZooKeeper");
     } catch (Exception e) {
       SolrException.log(log, "Reconnect to ZooKeeper failed", e);
@@ -53,4 +63,37 @@ public class DefaultConnectionStrategy extends ZkClientConnectionStrategy {
     
   }
 
+  protected SolrZooKeeper createSolrZooKeeper(final String serverAddress, final int zkClientTimeout,
+      final Watcher watcher) throws IOException {
+    SolrZooKeeper result = new SolrZooKeeper(serverAddress, zkClientTimeout, watcher);
+    
+    zkCredentialsToAddAutomaticallyUsed = true;
+    for (ZkCredentials zkCredentials : zkCredentialsToAddAutomatically.getCredentials()) {
+      result.addAuthInfo(zkCredentials.getScheme(), zkCredentials.getAuth());
+    }
+
+    return result;
+  }
+  
+  public void setZkCredentialsToAddAutomatically(ZkCredentialsProvider zkCredentialsToAddAutomatically) {
+    if (zkCredentialsToAddAutomaticallyUsed || (zkCredentialsToAddAutomatically == null)) 
+      throw new RuntimeException("Cannot change zkCredentialsToAddAutomatically after it has been (connect or reconnect was called) used or to null");
+    this.zkCredentialsToAddAutomatically = zkCredentialsToAddAutomatically;
+  }
+  
+  public static final String ZK_CREDENTIALS_PROVIDER_CLASS_NAME_VM_PARAM_NAME = "defaultZkCredentialsProvider";
+  protected ZkCredentialsProvider createZkCredentialsToAddAutomatically() {
+    String zkCredentialsProviderClassName = System.getProperty(ZK_CREDENTIALS_PROVIDER_CLASS_NAME_VM_PARAM_NAME);
+    if (!StringUtils.isEmpty(zkCredentialsProviderClassName)) {
+      try {
+        return (ZkCredentialsProvider)Class.forName(zkCredentialsProviderClassName).getConstructor().newInstance();
+      } catch (Throwable t) {
+        // just ignore - go default
+        log.warn("VM param zkACLProvider does not point to a class implementing ZkACLProvider and with a non-arg constructor", t);
+      }
+    }
+    return new DefaultZkCredentialsProvider();
+  }
+
+  
 }

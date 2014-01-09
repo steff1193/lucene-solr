@@ -113,7 +113,7 @@ public class XmlUpdateRequestHandlerTest extends SolrTestCaseJ4 {
 
     AddUpdateCommand add = p.addCommands.get(0);
     assertEquals(100, add.commitWithin);
-    assertEquals(false, add.overwrite);
+    assertEquals(false, add.classicOverwrite);
     req.close();
   }
   

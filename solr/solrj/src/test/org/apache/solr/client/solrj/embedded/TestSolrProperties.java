@@ -249,7 +249,7 @@ public class TestSolrProperties extends AbstractEmbeddedSolrServerTestCase {
 
     CoreAdminRequest.createCore("newCore", SOLR_HOME.getAbsolutePath(),
         coreadmin, null, null, dataDir.getAbsolutePath(),
-        tlogDir.getAbsolutePath());
+        tlogDir.getAbsolutePath(), null);
 
 //    fis = new FileInputStream(new File(solrXml.getParent(), SOLR_PERSIST_XML));
 //    solrPersistXml = IOUtils.toString(fis);

@@ -25,6 +25,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.http.client.HttpClient;
+import org.apache.http.conn.ClientConnectionManager;
 import org.apache.solr.client.solrj.SolrServerException;
 import org.apache.solr.client.solrj.impl.HttpClientUtil;
 import org.apache.solr.client.solrj.impl.HttpSolrServer;
@@ -39,10 +40,12 @@ import org.apache.solr.common.util.ExecutorUtil;
 import org.apache.solr.common.util.NamedList;
 import org.apache.solr.core.CoreDescriptor;
 import org.apache.solr.core.SolrCore;
+import org.apache.solr.handler.component.HttpShardHandler;
 import org.apache.solr.handler.component.HttpShardHandlerFactory;
 import org.apache.solr.handler.component.ShardHandler;
 import org.apache.solr.handler.component.ShardRequest;
 import org.apache.solr.handler.component.ShardResponse;
+import org.apache.solr.security.InterSolrNodeAuthCredentialsFactory.AuthCredentialsSource;
 import org.apache.solr.update.PeerSync;
 import org.apache.solr.util.DefaultSolrThreadFactory;
 import org.slf4j.Logger;
@@ -54,6 +57,7 @@ public class SyncStrategy {
   private final boolean SKIP_AUTO_RECOVERY = Boolean.getBoolean("solrcloud.skip.autorecovery");
   
   private final ShardHandler shardHandler;
+  private final AuthCredentialsSource authCredentialsSource;
   
   private ThreadPoolExecutor recoveryCmdExecutor = new ThreadPoolExecutor(
       0, Integer.MAX_VALUE, 5, TimeUnit.SECONDS,
@@ -62,19 +66,12 @@ public class SyncStrategy {
 
   private volatile boolean isClosed;
   
-  private final HttpClient client;
-  {
+  public SyncStrategy(AuthCredentialsSource authCredentialsSource) {
+    HttpShardHandlerFactory shardHandlerFactory = new HttpShardHandlerFactory();
     ModifiableSolrParams params = new ModifiableSolrParams();
-    params.set(HttpClientUtil.PROP_MAX_CONNECTIONS, 10000);
-    params.set(HttpClientUtil.PROP_MAX_CONNECTIONS_PER_HOST, 20);
-    params.set(HttpClientUtil.PROP_CONNECTION_TIMEOUT, 30000);
-    params.set(HttpClientUtil.PROP_SO_TIMEOUT, 30000);
     params.set(HttpClientUtil.PROP_USE_RETRY, false);
-    client = HttpClientUtil.createClient(params);
-  }
-  
-  public SyncStrategy() {
-    shardHandler = new HttpShardHandlerFactory().getShardHandler(client);
+    shardHandler = shardHandlerFactory.getShardHandler(authCredentialsSource);
+    this.authCredentialsSource = authCredentialsSource;
   }
   
   private static class ShardCoreRequest extends ShardRequest {
@@ -167,7 +164,11 @@ public class SyncStrategy {
     // TODO: as an assurance, we should still try and tell the sync nodes that we couldn't reach
     // to recover once more?
     PeerSync peerSync = new PeerSync(core, syncWith, core.getUpdateHandler().getUpdateLog().numRecordsToKeep, true, true);
+    try {
     return peerSync.sync();
+    } finally {
+      peerSync.close();
+    }
   }
   
   private void syncToMe(ZkController zkController, String collection,
@@ -262,11 +263,6 @@ public class SyncStrategy {
   public void close() {
     this.isClosed = true;
     try {
-      client.getConnectionManager().shutdown();
-    } catch (Throwable e) {
-      SolrException.log(log, e);
-    }
-    try {
       ExecutorUtil.shutdownNowAndAwaitTermination(recoveryCmdExecutor);
     } catch (Throwable e) {
       SolrException.log(log, e);
@@ -282,9 +278,12 @@ public class SyncStrategy {
       public void run() {
         RequestRecovery recoverRequestCmd = new RequestRecovery();
         recoverRequestCmd.setAction(CoreAdminAction.REQUESTRECOVERY);
+        if (authCredentialsSource != null) {
+          recoverRequestCmd.setAuthCredentials(authCredentialsSource.getAuthCredentials());
+        }
         recoverRequestCmd.setCoreName(coreName);
         
-        HttpSolrServer server = new HttpSolrServer(baseUrl, client);
+        HttpSolrServer server = new HttpSolrServer(baseUrl, ((HttpShardHandler)shardHandler).getHttpClient());
         server.setConnectionTimeout(45000);
         server.setSoTimeout(45000);
         try {

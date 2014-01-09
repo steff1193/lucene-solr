@@ -17,6 +17,10 @@ package org.apache.solr.cloud;
  * limitations under the License.
  */
 
+import static org.apache.solr.client.solrj.embedded.JettySolrRunner.ALL_CREDENTIALS;
+import static org.apache.solr.client.solrj.embedded.JettySolrRunner.UPDATE_CREDENTIALS;
+import static org.apache.solr.client.solrj.embedded.JettySolrRunner.SEARCH_CREDENTIALS;
+
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.util.HashMap;
@@ -29,6 +33,7 @@ import java.util.Set;
 import org.apache.http.params.CoreConnectionPNames;
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrRequest;
+import org.apache.solr.client.solrj.SolrRequest.METHOD;
 import org.apache.solr.client.solrj.SolrServer;
 import org.apache.solr.client.solrj.SolrServerException;
 import org.apache.solr.client.solrj.impl.CloudSolrServer;
@@ -213,12 +218,12 @@ public class ShardSplitTest extends BasicDistributedZkTest {
 
     ZkCoreNodeProps shard1_0 = getLeaderUrlFromZk(AbstractDistribZkTestBase.DEFAULT_COLLECTION, SHARD1_0);
     HttpSolrServer shard1_0Server = new HttpSolrServer(shard1_0.getCoreUrl());
-    QueryResponse response = shard1_0Server.query(query);
+    QueryResponse response = shard1_0Server.query(query, METHOD.GET, SEARCH_CREDENTIALS);
     long shard10Count = response.getResults().getNumFound();
 
     ZkCoreNodeProps shard1_1 = getLeaderUrlFromZk(AbstractDistribZkTestBase.DEFAULT_COLLECTION, SHARD1_1);
     HttpSolrServer shard1_1Server = new HttpSolrServer(shard1_1.getCoreUrl());
-    QueryResponse response2 = shard1_1Server.query(query);
+    QueryResponse response2 = shard1_1Server.query(query, METHOD.GET, SEARCH_CREDENTIALS);
     long shard11Count = response2.getResults().getNumFound();
 
     logDebugHelp(docCounts, response, shard10Count, response2, shard11Count);
@@ -238,7 +243,7 @@ public class ShardSplitTest extends BasicDistributedZkTest {
     for (Replica replica : slice.getReplicas()) {
       String coreUrl = new ZkCoreNodeProps(replica).getCoreUrl();
       HttpSolrServer server = new HttpSolrServer(coreUrl);
-      QueryResponse response = server.query(query);
+      QueryResponse response = server.query(query, METHOD.GET, SEARCH_CREDENTIALS);
       numFound[c++] = response.getResults().getNumFound();
       log.info("Shard: " + shard + " Replica: {} has {} docs", coreUrl, String.valueOf(response.getResults().getNumFound()));
       assertTrue("Shard: " + shard + " Replica: " + coreUrl + " has 0 docs", response.getResults().getNumFound() > 0);
@@ -255,6 +260,7 @@ public class ShardSplitTest extends BasicDistributedZkTest {
     params.set("shard", shardId);
     SolrRequest request = new QueryRequest(params);
     request.setPath("/admin/collections");
+    request.setAuthCredentials(ALL_CREDENTIALS);
 
     String baseUrl = ((HttpSolrServer) shardToJetty.get(SHARD1).get(0).client.solrClient)
         .getBaseURL();
@@ -276,8 +282,8 @@ public class ShardSplitTest extends BasicDistributedZkTest {
   }
 
   protected void deleteAndUpdateCount(DocRouter router, List<DocRouter.Range> ranges, int[] docCounts, String id) throws Exception {
-    controlClient.deleteById(id);
-    cloudClient.deleteById(id);
+    controlClient.deleteById(id, -1, UPDATE_CREDENTIALS);
+    cloudClient.deleteById(id, -1, UPDATE_CREDENTIALS);
 
     int idx = getHashRangeIdx(router, ranges, docCounts, id);
     if (idx != -1)  {

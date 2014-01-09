@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.apache.http.client.HttpClient;
 import org.apache.solr.client.solrj.SolrResponse;
 import org.apache.solr.client.solrj.SolrServerException;
 import org.apache.solr.client.solrj.impl.HttpSolrServer;
@@ -47,6 +48,7 @@ import org.apache.solr.common.cloud.ZkCoreNodeProps;
 import org.apache.solr.common.cloud.ZkNodeProps;
 import org.apache.solr.common.cloud.ZkStateReader;
 import org.apache.solr.common.cloud.ZooKeeperException;
+import org.apache.solr.common.exceptions.SolrExceptionCausedByException;
 import org.apache.solr.common.params.CoreAdminParams;
 import org.apache.solr.common.params.CoreAdminParams.CoreAdminAction;
 import org.apache.solr.common.params.ModifiableSolrParams;
@@ -54,6 +56,7 @@ import org.apache.solr.common.params.UpdateParams;
 import org.apache.solr.common.util.NamedList;
 import org.apache.solr.common.util.SimpleOrderedMap;
 import org.apache.solr.common.util.StrUtils;
+import org.apache.solr.handler.component.HttpShardHandler;
 import org.apache.solr.handler.component.ShardHandler;
 import org.apache.solr.handler.component.ShardRequest;
 import org.apache.solr.handler.component.ShardResponse;
@@ -124,10 +127,10 @@ public class OverseerCollectionProcessor implements Runnable, ClosableThread {
            final ZkNodeProps message = ZkNodeProps.load(head.getBytes());
            log.info("Overseer Collection Processor: Get the message id:" + head.getId() + " message:" + message.toString());
            final String operation = message.getStr(QUEUE_OPERATION);
-           SolrResponse response = processMessage(message, operation);
+           Object response = processMessage(message, operation);
            head.setBytes(SolrResponse.serializable(response));
            workQueue.remove(head);
-          log.info("Overseer Collection Processor: Message id:" + head.getId() + " complete, response:"+ response.getResponse().toString());
+           log.info("Overseer Collection Processor: Message id:" + head.getId() + " complete, response:"+ ((response instanceof SolrResponse)?((SolrResponse)response).getResponse().toString():response.toString()));
         } catch (KeeperException e) {
           if (e.code() == KeeperException.Code.SESSIONEXPIRED
               || e.code() == KeeperException.Code.CONNECTIONLOSS) {
@@ -167,9 +170,11 @@ public class OverseerCollectionProcessor implements Runnable, ClosableThread {
   }
   
   
-  protected SolrResponse processMessage(ZkNodeProps message, String operation) {
+  private static ThreadLocal<String> operation = new ThreadLocal<String>();
+  protected Object processMessage(ZkNodeProps message, String operation) {
     
     NamedList results = new NamedList();
+    OverseerCollectionProcessor.operation.set(operation);
     try {
       if (CREATECOLLECTION.equals(operation)) {
         createCollection(zkStateReader.getClusterState(), message, results);
@@ -195,17 +200,15 @@ public class OverseerCollectionProcessor implements Runnable, ClosableThread {
     } catch (Throwable t) {
       SolrException.log(log, "Collection " + operation + " of " + operation
           + " failed", t);
-      results.add("Operation " + operation + " caused exception:", t);
-      SimpleOrderedMap nl = new SimpleOrderedMap();
-      nl.add("msg", t.getMessage());
-      nl.add("rspCode", t instanceof SolrException ? ((SolrException)t).code() : -1);
-      results.add("exception", nl);
+      return t;
+    } finally {
+      OverseerCollectionProcessor.operation.remove();
     } 
     
     return new OverseerSolrResponse(results);
   }
 
-  private void deleteCollection(ZkNodeProps message, NamedList results) throws KeeperException, InterruptedException {
+  private void deleteCollection(ZkNodeProps message, NamedList results) throws Throwable {
     ModifiableSolrParams params = new ModifiableSolrParams();
     params.set(CoreAdminParams.ACTION, CoreAdminAction.UNLOAD.toString());
     params.set(CoreAdminParams.DELETE_INSTANCE_DIR, true);
@@ -334,7 +337,7 @@ public class OverseerCollectionProcessor implements Runnable, ClosableThread {
     
   }
   
-  private boolean splitShard(ClusterState clusterState, ZkNodeProps message, NamedList results) {
+  private boolean splitShard(ClusterState clusterState, ZkNodeProps message, NamedList results) throws Throwable {
     log.info("Split shard invoked");
     String collectionName = message.getStr("collection");
     String slice = message.getStr(ZkStateReader.SHARD_ID_PROP);
@@ -554,10 +557,10 @@ public class OverseerCollectionProcessor implements Runnable, ClosableThread {
       // and we force open a searcher so that we have documents to show upon switching states
       UpdateResponse updateResponse = null;
       try {
-        updateResponse = commit(coreUrl, true);
-        processResponse(results, null, coreUrl, updateResponse, slice);
+        updateResponse = commit(coreUrl, ((HttpShardHandler)shardHandler).getHttpClient(), true);
+        processResponse(results, null, coreUrl, updateResponse, slice, nodeName);
       } catch (Exception e) {
-        processResponse(results, e, coreUrl, updateResponse, slice);
+        processResponse(results, e, coreUrl, updateResponse, slice, nodeName);
         throw new SolrException(ErrorCode.SERVER_ERROR, "Unable to call distrib commit on: " + coreUrl, e);
       }
 
@@ -585,10 +588,10 @@ public class OverseerCollectionProcessor implements Runnable, ClosableThread {
     }
   }
 
-  static UpdateResponse commit(String url, boolean openSearcher) throws SolrServerException, IOException {
+  static UpdateResponse commit(String url, HttpClient httpClient, boolean openSearcher) throws SolrServerException, IOException {
     HttpSolrServer server = null;
     try {
-      server = new HttpSolrServer(url);
+      server = new HttpSolrServer(url, httpClient);
       server.setConnectionTimeout(30000);
       server.setSoTimeout(60000);
       UpdateRequest ureq = new UpdateRequest();
@@ -632,7 +635,7 @@ public class OverseerCollectionProcessor implements Runnable, ClosableThread {
     throw new SolrException(ErrorCode.SERVER_ERROR, "Could not find coreNodeName");
   }
 
-  private void collectShardResponses(NamedList results, boolean abortOnError, String msgOnError) {
+  private void collectShardResponses(NamedList results, boolean abortOnError, String msgOnError) throws Throwable {
     ShardResponse srsp;
     do {
       srsp = shardHandler.takeCompletedOrError();
@@ -641,9 +644,7 @@ public class OverseerCollectionProcessor implements Runnable, ClosableThread {
         Throwable exception = srsp.getException();
         if (abortOnError && exception != null)  {
           // drain pending requests
-          while (srsp != null)  {
-            srsp = shardHandler.takeCompletedOrError();
-          }
+          shardHandler.cancelAll();
           throw new SolrException(ErrorCode.SERVER_ERROR, msgOnError, exception);
         }
       }
@@ -651,7 +652,7 @@ public class OverseerCollectionProcessor implements Runnable, ClosableThread {
   }
 
   
-  private void deleteShard(ClusterState clusterState, ZkNodeProps message, NamedList results) {
+  private void deleteShard(ClusterState clusterState, ZkNodeProps message, NamedList results) throws Throwable {
     log.info("Delete shard invoked");
     String collection = message.getStr(ZkStateReader.COLLECTION_PROP);
 
@@ -732,7 +733,7 @@ public class OverseerCollectionProcessor implements Runnable, ClosableThread {
     shardHandler.submit(sreq, replica, sreq.params);
   }
 
-  private void createCollection(ClusterState clusterState, ZkNodeProps message, NamedList results) {
+  private void createCollection(ClusterState clusterState, ZkNodeProps message, NamedList results) throws Throwable {
     String collectionName = message.getStr("name");
     if (clusterState.getCollections().contains(collectionName)) {
       throw new SolrException(ErrorCode.BAD_REQUEST, "collection already exists: " + collectionName);
@@ -742,7 +743,7 @@ public class OverseerCollectionProcessor implements Runnable, ClosableThread {
       // look at the replication factor and see if it matches reality
       // if it does not, find best nodes to create more cores
       
-      int repFactor = msgStrToInt(message, REPLICATION_FACTOR, 1);
+      int numReplica = msgStrToInt(message, REPLICATION_FACTOR, 0);
       Integer numSlices = msgStrToInt(message, NUM_SLICES, null);
       
       if (numSlices == null) {
@@ -753,12 +754,12 @@ public class OverseerCollectionProcessor implements Runnable, ClosableThread {
       String createNodeSetStr; 
       List<String> createNodeList = ((createNodeSetStr = message.getStr(CREATE_NODE_SET)) == null)?null:StrUtils.splitSmart(createNodeSetStr, ",", true);
       
-      if (repFactor <= 0) {
+      if (numReplica < 0) {
         throw new SolrException(ErrorCode.BAD_REQUEST, REPLICATION_FACTOR + " must be greater than or equal to 0");
       }
       
       if (numSlices <= 0) {
-        throw new SolrException(ErrorCode.BAD_REQUEST, NUM_SLICES + " must be > 0");
+        throw new SolrException(ErrorCode.BAD_REQUEST, NUM_SLICES + " must be greater than 0");
       }
       
       String configName = message.getStr("collection.configName");
@@ -781,11 +782,12 @@ public class OverseerCollectionProcessor implements Runnable, ClosableThread {
             + ". No live Solr-instances" + ((createNodeList != null)?" among Solr-instances specified in " + CREATE_NODE_SET + ":" + createNodeSetStr:""));
       }
       
-      if (repFactor > nodeList.size()) {
+      int numShardsPerSlice = numReplica + 1;
+      if (numShardsPerSlice > nodeList.size()) {
         log.warn("Specified "
             + REPLICATION_FACTOR
             + " of "
-            + repFactor
+            + numShardsPerSlice
             + " on collection "
             + collectionName
             + " is higher than or equal to the number of Solr instances currently live or part of your " + CREATE_NODE_SET + "("
@@ -794,28 +796,35 @@ public class OverseerCollectionProcessor implements Runnable, ClosableThread {
       }
       
       int maxShardsAllowedToCreate = maxShardsPerNode * nodeList.size();
-      int requestedShardsToCreate = numSlices * repFactor;
+      int requestedShardsToCreate = numSlices * numShardsPerSlice;
       if (maxShardsAllowedToCreate < requestedShardsToCreate) {
         throw new SolrException(ErrorCode.BAD_REQUEST, "Cannot create collection " + collectionName + ". Value of "
             + MAX_SHARDS_PER_NODE + " is " + maxShardsPerNode
             + ", and the number of live nodes is " + nodeList.size()
             + ". This allows a maximum of " + maxShardsAllowedToCreate
             + " to be created. Value of " + NUM_SLICES + " is " + numSlices
-            + " and value of " + REPLICATION_FACTOR + " is " + repFactor
+            + " and value of " + REPLICATION_FACTOR + " is " + numReplica
             + ". This requires " + requestedShardsToCreate
             + " shards to be created (higher than the allowed number)");
       }
       
       for (int i = 1; i <= numSlices; i++) {
-        for (int j = 1; j <= repFactor; j++) {
-          String nodeName = nodeList.get((repFactor * (i - 1) + (j - 1)) % nodeList.size());
+        for (int j = 1; j <= numShardsPerSlice; j++) {
+          // Note: Different shard layout than what Apache do, in order to try to be compatible with collections already created
+          String nodeName = nodeList.get((numShardsPerSlice * (i - 1) + (j - 1))%nodeList.size()); 
+          // TODO ought to be allowed to have sliceName = "slice" + 1 and shardName = collectionName + "_" + sliceName + "_shard" + j
+          // Especially the sliceName thing. 
+          // "shard" is a bad name for a slice, since "shard" is also used for something else. 
+          // "replica" is an ok name for a shard, it is just the shards does not become replica before a runtime, where one of the shards becomes leader and the rest becomes replica
           String sliceName = "shard" + i;
           String shardName = collectionName + "_" + sliceName + "_replica" + j;
           log.info("Creating shard " + shardName + " as part of slice "
               + sliceName + " of collection " + collectionName + " on "
               + nodeName);
-          
-          // Need to create new params for each request
+          // Need to create params for each request, because the shardHandler.submit initiates a asynchronous request that will use the params
+          // when it is executed. But this createCollection might very well have changed 
+          // the params already when this asynchronous job gets a chance to run. Result without a separate params object would be that a
+          // strange set of shards might be created - wrong names on wrong Solr instances etc. etc.
           ModifiableSolrParams params = new ModifiableSolrParams();
           params.set(CoreAdminParams.ACTION, CoreAdminAction.CREATE.toString());
           
@@ -825,6 +834,8 @@ public class OverseerCollectionProcessor implements Runnable, ClosableThread {
           params.set(CoreAdminParams.SHARD, sliceName);
           params.set(ZkStateReader.NUM_SHARDS_PROP, numSlices);
           
+          // TODO Really do not understand why we do use a CoreAdminRequest.Create request here (it is designed for core creation)
+          // instead of inventing another ShardRequest to carry information about the same kind of request. Inconsistent.
           ShardRequest sreq = new ShardRequest();
           params.set("qt", adminPath);
           sreq.purpose = 1;
@@ -858,7 +869,7 @@ public class OverseerCollectionProcessor implements Runnable, ClosableThread {
     }
   }
   
-  private void collectionCmd(ClusterState clusterState, ZkNodeProps message, ModifiableSolrParams params, NamedList results, String stateMatcher) {
+  private void collectionCmd(ClusterState clusterState, ZkNodeProps message, ModifiableSolrParams params, NamedList results, String stateMatcher) throws Throwable {
     log.info("Executing Collection Cmd : " + params);
     String collectionName = message.getStr("name");
     
@@ -918,33 +929,24 @@ public class OverseerCollectionProcessor implements Runnable, ClosableThread {
     Throwable e = srsp.getException();
     String nodeName = srsp.getNodeName();
     SolrResponse solrResponse = srsp.getSolrResponse();
-    String shard = srsp.getShard();
+    String node = srsp.getShard();
 
-    processResponse(results, e, nodeName, solrResponse, shard);
+    processResponse(results, e, nodeName, solrResponse, srsp.getShardRequest().params.get(CoreAdminParams.NAME), node);
   }
 
-  private void processResponse(NamedList results, Throwable e, String nodeName, SolrResponse solrResponse, String shard) {
+  private void processResponse(NamedList results, Throwable e, String nodeName, SolrResponse solrResponse, String replica, String node) {
+    String partRef = node + " " + replica;
+
     if (e != null) {
-      log.error("Error from shard: " + shard, e);
+      ErrorCode errorCode = (e instanceof SolrException)?ErrorCode.getErrorCode(((SolrException)e).code()):ErrorCode.UNKNOWN;
+      SolrException partialError = (e instanceof SolrException)?((SolrException)e):new SolrExceptionCausedByException(errorCode, "Not able to perform sub-operation", e); 
 
-      SimpleOrderedMap failure = (SimpleOrderedMap) results.get("failure");
-      if (failure == null) {
-        failure = new SimpleOrderedMap();
-        results.add("failure", failure);
+      solrResponse.addPartialError(null, results, partRef, partialError);
+
+      log.error("Error from shard: " + node, e);
       }
 
-      failure.add(nodeName, e.getClass().getName() + ":" + e.getMessage());
-
-    } else {
-
-      SimpleOrderedMap success = (SimpleOrderedMap) results.get("success");
-      if (success == null) {
-        success = new SimpleOrderedMap();
-        results.add("success", success);
-      }
-
-      success.add(nodeName, solrResponse.getResponse());
-    }
+    solrResponse.addHandledPart(results, partRef);
   }
 
   private Integer msgStrToInt(ZkNodeProps message, String key, Integer def)

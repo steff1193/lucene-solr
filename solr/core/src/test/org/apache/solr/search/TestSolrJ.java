@@ -163,7 +163,7 @@ public class TestSolrJ extends SolrTestCaseJ4 {
 
 
   public void doCommitPerf() throws Exception {
-    HttpSolrServer client = new HttpSolrServer("http://127.0.0.1:8983/solr");
+    SolrServer client = new HttpSolrServer("http://127.0.0.1:8983/solr");
 
     long start = System.currentTimeMillis();
 
@@ -171,7 +171,7 @@ public class TestSolrJ extends SolrTestCaseJ4 {
       SolrInputDocument doc = new SolrInputDocument();
       doc.addField("id", Integer.toString(i % 13));
       client.add(doc);
-      client.commit(true, true, true);
+      client.commit(true, true, true, null);
     }
 
     long end = System.currentTimeMillis();

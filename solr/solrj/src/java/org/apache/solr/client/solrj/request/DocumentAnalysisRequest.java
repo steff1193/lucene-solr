@@ -39,7 +39,7 @@ import java.util.List;
  *
  * @since solr 1.4
  */
-public class DocumentAnalysisRequest extends SolrRequest {
+public class DocumentAnalysisRequest extends SolrRequest<DocumentAnalysisResponse> {
 
   private List<SolrInputDocument> documents = new ArrayList<SolrInputDocument>();
   private String query;
@@ -80,18 +80,6 @@ public class DocumentAnalysisRequest extends SolrRequest {
       params.add(AnalysisParams.SHOW_MATCH, String.valueOf(showMatch));
     }
     return params;
-  }
-
-  /**
-   * {@inheritDoc}
-   */
-  @Override
-  public DocumentAnalysisResponse process(SolrServer server) throws SolrServerException, IOException {
-    long startTime = System.currentTimeMillis();
-    DocumentAnalysisResponse res = new DocumentAnalysisResponse();
-    res.setResponse(server.request(this));
-    res.setElapsedTime(System.currentTimeMillis() - startTime);
-    return res;
   }
 
   //================================================ Helper Methods ==================================================

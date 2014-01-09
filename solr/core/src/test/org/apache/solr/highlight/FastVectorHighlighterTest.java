@@ -72,7 +72,7 @@ public class FastVectorHighlighterTest extends SolrTestCaseJ4 {
     args.put("hl.fl", "tv_text");
     args.put("hl.snippets", "2");
     args.put("hl.useFastVectorHighlighter", "true");
-    TestHarness.LocalRequestFactory sumLRF = h.getRequestFactory(
+    TestHarness.LocalRequestInfoFactory sumLRF = h.getRequestInfoFactory(
       "standard",0,200,args);
     
     assertU(adoc("tv_text", "basic fast vector highlighter test", 
@@ -80,7 +80,7 @@ public class FastVectorHighlighterTest extends SolrTestCaseJ4 {
     assertU(commit());
     assertU(optimize());
     assertQ("Basic summarization",
-            sumLRF.makeRequest("tv_text:vector"),
+            sumLRF.makeRequestInfo("tv_text:vector").getReq(),
             "//lst[@name='highlighting']/lst[@name='1']",
             "//lst[@name='1']/arr[@name='tv_text']/str[.='basic fast <em>vector</em> highlighter test']"
             );

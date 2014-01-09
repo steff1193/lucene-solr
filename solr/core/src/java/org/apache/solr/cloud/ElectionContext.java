@@ -15,6 +15,7 @@ import org.apache.solr.common.cloud.ZkStateReader;
 import org.apache.solr.core.CoreContainer;
 import org.apache.solr.core.SolrCore;
 import org.apache.solr.update.UpdateLog;
+import org.apache.solr.security.InterSolrNodeAuthCredentialsFactory.AuthCredentialsSource;
 import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.KeeperException.NoNodeException;
@@ -113,7 +114,7 @@ final class ShardLeaderElectionContext extends ShardLeaderElectionContextBase {
   
   private ZkController zkController;
   private CoreContainer cc;
-  private SyncStrategy syncStrategy = new SyncStrategy();
+  private SyncStrategy syncStrategy = new SyncStrategy(AuthCredentialsSource.useInternalAuthCredentials());
 
   private volatile boolean isClosed = false;
   

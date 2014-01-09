@@ -30,7 +30,7 @@ import java.io.IOException;
  *
  *
  **/
-public abstract class AbstractUpdateRequest extends SolrRequest implements IsUpdateRequest {
+public abstract class AbstractUpdateRequest extends SolrRequest<UpdateResponse> implements IsUpdateRequest {
   protected ModifiableSolrParams params;
   protected int commitWithin = -1;
 
@@ -107,16 +107,6 @@ public abstract class AbstractUpdateRequest extends SolrRequest implements IsUpd
   @Override
   public ModifiableSolrParams getParams() {
     return params;
-  }
-
-  @Override
-  public UpdateResponse process( SolrServer server ) throws SolrServerException, IOException
-  {
-    long startTime = System.currentTimeMillis();
-    UpdateResponse res = new UpdateResponse();
-    res.setResponse( server.request( this ) );
-    res.setElapsedTime( System.currentTimeMillis()-startTime );
-    return res;
   }
 
   public boolean isWaitSearcher() {

@@ -17,6 +17,7 @@ package org.apache.solr.handler.loader;
  */
 
 
+import org.apache.solr.common.RequestPart;
 import org.apache.solr.common.params.SolrParams;
 import org.apache.solr.common.util.ContentStream;
 import org.apache.solr.request.SolrQueryRequest;
@@ -30,6 +31,9 @@ import org.apache.solr.update.processor.UpdateRequestProcessor;
  * This should be thread safe and can be called from multiple threads
  */
 public abstract class ContentStreamLoader {
+
+  protected static final String NON_FIELD_PREFIX = "nonfield.";
+  protected static final String PART_REF_COLUMN_NAME = NON_FIELD_PREFIX + RequestPart.PART_REF_KEY;
 
   /**
    * This should be called once for each RequestHandler

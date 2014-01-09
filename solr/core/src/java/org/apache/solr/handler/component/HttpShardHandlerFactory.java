@@ -40,6 +40,8 @@ import org.apache.solr.common.util.ExecutorUtil;
 import org.apache.solr.common.util.NamedList;
 import org.apache.solr.common.util.StrUtils;
 import org.apache.solr.core.PluginInfo;
+import org.apache.solr.security.AuthCredentials;
+import org.apache.solr.security.InterSolrNodeAuthCredentialsFactory.AuthCredentialsSource;
 import org.apache.solr.util.DefaultSolrThreadFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,6 +49,12 @@ import org.slf4j.LoggerFactory;
 
 public class HttpShardHandlerFactory extends ShardHandlerFactory implements org.apache.solr.util.plugin.PluginInfoInitialized {
   protected static Logger log = LoggerFactory.getLogger(HttpShardHandlerFactory.class);
+
+  public HttpShardHandlerFactory() {
+    this.defaultNonAuthClient = getHttpClient(null);
+    this.defaultInternalAuthClient = getHttpClient(AuthCredentialsSource.useInternalAuthCredentials().getAuthCredentials());
+    this.loadbalancer = createLoadbalancer(defaultNonAuthClient);
+  }
 
   // We want an executor that doesn't take up any resources if
   // it's not used, so it could be created statically for
@@ -62,7 +70,8 @@ public class HttpShardHandlerFactory extends ShardHandlerFactory implements org.
       new DefaultSolrThreadFactory("httpShardExecutor")
   );
 
-  private HttpClient defaultClient;
+  private HttpClient defaultNonAuthClient;
+  private HttpClient defaultInternalAuthClient;
   private LBHttpSolrServer loadbalancer;
   //default values:
   int soTimeout = 0; 
@@ -101,14 +110,33 @@ public class HttpShardHandlerFactory extends ShardHandlerFactory implements org.
    */
   @Override
   public ShardHandler getShardHandler() {
-    return getShardHandler(defaultClient);
+    return new HttpShardHandler(this, defaultInternalAuthClient, null);
+  }
+  
+  public ShardHandler getShardHandler(AuthCredentialsSource authCredentialsSource) {
+    if (AuthCredentialsSource.useInternalAuthCredentials() == authCredentialsSource) {
+      return new HttpShardHandler(this, defaultInternalAuthClient, null);
+    } else {
+      return new HttpShardHandler(this, defaultNonAuthClient, authCredentialsSource);
+    }
   }
 
   /**
    * Get {@link ShardHandler} that uses custom http client.
    */
-  public ShardHandler getShardHandler(final HttpClient httpClient){
+  /*public ShardHandler getShardHandler(final HttpClient httpClient, AuthCredentialsSource authCredentialsSource){
+    HttpClientUtil.setAuthCredentials(httpClient, authCredentialsSource.getAuthCredentials());
     return new HttpShardHandler(this, httpClient);
+  }*/
+  
+  private HttpClient getHttpClient(AuthCredentials authCredentials) {
+    ModifiableSolrParams clientParams = new ModifiableSolrParams();
+    clientParams.set(HttpClientUtil.PROP_MAX_CONNECTIONS_PER_HOST, maxConnectionsPerHost);
+    clientParams.set(HttpClientUtil.PROP_MAX_CONNECTIONS, 10000);
+    clientParams.set(HttpClientUtil.PROP_SO_TIMEOUT, soTimeout);
+    clientParams.set(HttpClientUtil.PROP_CONNECTION_TIMEOUT, connectionTimeout);
+    clientParams.set(HttpClientUtil.PROP_USE_RETRY, false);
+    return HttpClientUtil.createClient(clientParams, authCredentials);
   }
 
   @Override
@@ -143,14 +171,6 @@ public class HttpShardHandlerFactory extends ShardHandlerFactory implements org.
         new DefaultSolrThreadFactory("httpShardExecutor")
     );
 
-    ModifiableSolrParams clientParams = new ModifiableSolrParams();
-    clientParams.set(HttpClientUtil.PROP_MAX_CONNECTIONS_PER_HOST, maxConnectionsPerHost);
-    clientParams.set(HttpClientUtil.PROP_MAX_CONNECTIONS, 10000);
-    clientParams.set(HttpClientUtil.PROP_SO_TIMEOUT, soTimeout);
-    clientParams.set(HttpClientUtil.PROP_CONNECTION_TIMEOUT, connectionTimeout);
-    clientParams.set(HttpClientUtil.PROP_USE_RETRY, false);
-    this.defaultClient = HttpClientUtil.createClient(clientParams);
-    this.loadbalancer = createLoadbalancer(defaultClient);
   }
 
   protected ThreadPoolExecutor getThreadPoolExecutor(){
@@ -180,14 +200,21 @@ public class HttpShardHandlerFactory extends ShardHandlerFactory implements org.
   @Override
   public void close() {
     try {
-      ExecutorUtil.shutdownNowAndAwaitTermination(commExecutor);
+      if (commExecutor != null) ExecutorUtil.shutdownNowAndAwaitTermination(commExecutor);
     } catch (Throwable e) {
       SolrException.log(log, e);
     }
     
     try {
-      if(defaultClient != null) {
-        defaultClient.getConnectionManager().shutdown();
+      if(defaultInternalAuthClient != null) {
+        defaultInternalAuthClient.getConnectionManager().shutdown();
+      }
+    } catch (Throwable e) {
+      SolrException.log(log, e);
+    }
+    try {
+      if(defaultNonAuthClient != null) {
+        defaultNonAuthClient.getConnectionManager().shutdown();
       }
     } catch (Throwable e) {
       SolrException.log(log, e);
@@ -209,9 +236,9 @@ public class HttpShardHandlerFactory extends ShardHandlerFactory implements org.
    * @param urls The list of solr server urls to load balance across
    * @return The response from the request
    */
-  public LBHttpSolrServer.Rsp makeLoadBalancedRequest(final QueryRequest req, List<String> urls)
+  public LBHttpSolrServer.Rsp makeLoadBalancedRequest(final QueryRequest req, List<String> urls, HttpClient httpClient)
     throws SolrServerException, IOException {
-    return loadbalancer.request(new LBHttpSolrServer.Req(req, urls));
+    return loadbalancer.request(new LBHttpSolrServer.Req(req, urls, httpClient));
   }
 
   /**

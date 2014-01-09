@@ -50,6 +50,7 @@ public class JsonLoaderTest extends SolrTestCaseJ4 {
       "  'doc': {\n" +
       "    'bool': true,\n" +
       "    'f0': 'v0',\n" +
+      "    'nonfield.partref': 'refMiddle',\n" +
       "    'f2': {\n" +
       "      'boost': 2.3,\n" +
       "      'value': 'test'\n" +
@@ -66,6 +67,15 @@ public class JsonLoaderTest extends SolrTestCaseJ4 {
       "  'overwrite': false,\n" +
       "  'boost': 3.45,\n" +
       "  'doc': {\n" +
+      "    'f1': 'v1',\n" +
+      "    'f1': 'v2',\n" +
+      "    'f2': null,\n" +
+      "    'nonfield.partref': 'refLast'\n" +      
+      "  }\n" +
+      "},\n" +
+      "'add': {\n" +
+      "  'doc': {\n" +
+      "    'nonfield.partref': 'refFirst',\n" +      
       "    'f1': 'v1',\n" +
       "    'f1': 'v2',\n" +
       "    'f2': null\n" +
@@ -93,11 +103,12 @@ public class JsonLoaderTest extends SolrTestCaseJ4 {
     JsonLoader loader = new JsonLoader();
     loader.load(req, rsp, new ContentStreamBase.StringStream(input), p);
 
-    assertEquals( 2, p.addCommands.size() );
+    assertEquals( 3, p.addCommands.size() );
     
     AddUpdateCommand add = p.addCommands.get(0);
     SolrInputDocument d = add.solrDoc;
     SolrInputField f = d.getField( "boosted" );
+    assertEquals("refMiddle", d.getUniquePartRef());
     assertEquals(6.7f, f.getBoost(), 0.1);
     assertEquals(2, f.getValues().size());
 
@@ -105,11 +116,16 @@ public class JsonLoaderTest extends SolrTestCaseJ4 {
     add = p.addCommands.get(1);
     d = add.solrDoc;
     f = d.getField( "f1" );
+    assertEquals("refLast", d.getUniquePartRef());
     assertEquals(2, f.getValues().size());
     assertEquals(3.45f, d.getDocumentBoost(), 0.001);
-    assertEquals(false, add.overwrite);
+    assertEquals(false, add.classicOverwrite);
 
     assertEquals(0, d.getField("f2").getValueCount());
+
+    add = p.addCommands.get(2);
+    d = add.solrDoc;
+    assertEquals("refFirst", d.getUniquePartRef());
 
     // parse the commit commands
     assertEquals( 2, p.commitCommands.size() );
@@ -155,7 +171,7 @@ public class JsonLoaderTest extends SolrTestCaseJ4 {
 
   public void testSimpleFormat() throws Exception
   {
-    String str = "[{'id':'1'},{'id':'2'}]".replace('\'', '"');
+    String str = "[{'nonfield.partref':'refFirst','id':'1'},{'id':'2','nonfield.partref': 'refLast'}]".replace('\'', '"');
     SolrQueryRequest req = req("commitWithin","100", "overwrite","false");
     SolrQueryResponse rsp = new SolrQueryResponse();
     BufferingRequestProcessor p = new BufferingRequestProcessor(null);
@@ -167,23 +183,25 @@ public class JsonLoaderTest extends SolrTestCaseJ4 {
     AddUpdateCommand add = p.addCommands.get(0);
     SolrInputDocument d = add.solrDoc;
     SolrInputField f = d.getField( "id" );
+    assertEquals("refFirst", d.getUniquePartRef());
     assertEquals("1", f.getValue());
-    assertEquals(add.commitWithin, 100);
-    assertEquals(add.overwrite, false);
+    assertEquals(100, add.commitWithin);
+    assertEquals(false, add.classicOverwrite);
 
     add = p.addCommands.get(1);
     d = add.solrDoc;
     f = d.getField( "id" );
+    assertEquals("refLast", d.getUniquePartRef());
     assertEquals("2", f.getValue());
-    assertEquals(add.commitWithin, 100);
-    assertEquals(add.overwrite, false);
+    assertEquals(100, add.commitWithin);
+    assertEquals(false, add.classicOverwrite);
 
     req.close();
   }
 
   public void testSimpleFormatInAdd() throws Exception
   {
-    String str = "{'add':[{'id':'1'},{'id':'2'}]}".replace('\'', '"');
+    String str = "{'add':[{'nonfield.partref':'refFirst','id':'1'},{'id':'2','nonfield.partref': 'refLast'}]}".replace('\'', '"');
     SolrQueryRequest req = req();
     SolrQueryResponse rsp = new SolrQueryResponse();
     BufferingRequestProcessor p = new BufferingRequestProcessor(null);
@@ -195,18 +213,51 @@ public class JsonLoaderTest extends SolrTestCaseJ4 {
     AddUpdateCommand add = p.addCommands.get(0);
     SolrInputDocument d = add.solrDoc;
     SolrInputField f = d.getField( "id" );
+    assertEquals("refFirst", d.getUniquePartRef());
     assertEquals("1", f.getValue());
-    assertEquals(add.commitWithin, -1);
-    assertEquals(add.overwrite, true);
+    assertEquals(-1, add.commitWithin);
+    assertEquals(true, add.classicOverwrite);
 
     add = p.addCommands.get(1);
     d = add.solrDoc;
     f = d.getField( "id" );
+    assertEquals("refLast", d.getUniquePartRef());
     assertEquals("2", f.getValue());
-    assertEquals(add.commitWithin, -1);
-    assertEquals(add.overwrite, true);
+    assertEquals(-1, add.commitWithin);
+    assertEquals(true, add.classicOverwrite);
 
     req.close();
+  }
+
+  public void testWrongPartRefs() throws Exception
+  {
+    String nullStr = "[{'nonfield.partref':null,'id':'1'},{'id':'2','nonfield.partref': 'refLast'}]".replace('\'', '"');
+    String noStr = "[{'nonfield.partref':1234,'id':'1'},{'id':'2','nonfield.partref': 'refLast'}]".replace('\'', '"');
+    String arrayStr = "[{'nonfield.partref':['ref1'],'id':'1'},{'id':'2','nonfield.partref': 'refLast'}]".replace('\'', '"');
+    
+    SolrQueryRequest req = req();
+    SolrQueryResponse rsp = new SolrQueryResponse();
+    BufferingRequestProcessor p = new BufferingRequestProcessor(null);
+    JsonLoader loader = new JsonLoader();
+    
+    try {
+      loader.load(req, rsp, new ContentStreamBase.StringStream(nullStr), p);
+    } catch (SolrException e) {
+      assertTrue(e.getMessage().contains("nonfield.partref must be a string"));
+    }
+
+    try {
+      loader.load(req, rsp, new ContentStreamBase.StringStream(noStr), p);
+    } catch (SolrException e) {
+      assertTrue(e.getMessage().contains("nonfield.partref must be a string"));
+    }
+
+    try {
+      loader.load(req, rsp, new ContentStreamBase.StringStream(arrayStr), p);
+    } catch (SolrException e) {
+      assertTrue(e.getMessage().contains("nonfield.partref must be a string"));
+    }
+
   }
 
   public void testExtendedFieldValues() throws Exception {
@@ -221,7 +272,7 @@ public class JsonLoaderTest extends SolrTestCaseJ4 {
 
     AddUpdateCommand add = p.addCommands.get(0);
     assertEquals(add.commitWithin, -1);
-    assertEquals(add.overwrite, true);
+    assertEquals(add.classicOverwrite, true);
     SolrInputDocument d = add.solrDoc;
 
     SolrInputField f = d.getField( "id" );

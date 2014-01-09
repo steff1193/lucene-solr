@@ -32,6 +32,7 @@ import org.apache.solr.common.util.ContentStreamBase;
 import org.apache.solr.core.SolrCore;
 import org.apache.solr.handler.UpdateRequestHandler;
 import org.apache.solr.request.SolrQueryRequestBase;
+import org.apache.solr.request.SolrRequestInfo;
 import org.apache.solr.response.SolrQueryResponse;
 import org.apache.solr.uima.processor.SolrUIMAConfiguration.MapField;
 import org.apache.solr.update.processor.UpdateRequestProcessor;
@@ -191,13 +192,17 @@ public class UIMAUpdateRequestProcessorTest extends SolrTestCaseJ4 {
     MultiMapSolrParams mmparams = new MultiMapSolrParams(params);
     SolrQueryRequestBase req = new SolrQueryRequestBase(h.getCore(), (SolrParams) mmparams) {
     };
-
+    SolrRequestInfo.setRequestInfo(new SolrRequestInfo(req, new SolrQueryResponse()));
+    try {
     UpdateRequestHandler handler = new UpdateRequestHandler();
     handler.init(null);
     ArrayList<ContentStream> streams = new ArrayList<ContentStream>(2);
     streams.add(new ContentStreamBase.StringStream(doc));
     req.setContentStreams(streams);
-    handler.handleRequestBody(req, new SolrQueryResponse());
+      handler.handleRequestBody(req, SolrRequestInfo.getRequestInfo().getRsp());
+    } finally {
+      SolrRequestInfo.clearRequestInfo();
+    }
   }
 
 }

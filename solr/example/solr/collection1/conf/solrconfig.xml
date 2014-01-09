@@ -412,6 +412,7 @@
        </listener>
       -->
 
+	<semanticsMode>${solr.semantics.mode:}</semanticsMode>
   </updateHandler>
   
   <!-- IndexReaderFactory

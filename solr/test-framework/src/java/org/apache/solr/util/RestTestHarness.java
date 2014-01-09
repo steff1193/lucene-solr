@@ -16,6 +16,7 @@ package org.apache.solr.util;
  * limitations under the License.
  */
 
+import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.io.IOUtils;
 
 import javax.xml.xpath.XPathExpressionException;
@@ -24,6 +25,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.StringWriter;
+import java.io.UnsupportedEncodingException;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
@@ -33,9 +35,26 @@ import java.net.URLEncoder;
  */
 public class RestTestHarness extends BaseTestHarness {
   private RESTfulServerProvider serverProvider;
+  private String authStringEnc;
   
   public RestTestHarness(RESTfulServerProvider serverProvider) {
+    this(serverProvider, null, null);
+  }
+  
+  public RestTestHarness(RESTfulServerProvider serverProvider, String username, String password) {
     this.serverProvider = serverProvider;
+    if (username != null && password != null) {
+      try {
+        String authString = username + ":" + password;
+        byte[] authEncBytes = Base64.encodeBase64(authString.getBytes("UTF-8"));
+        authStringEnc = new String(authEncBytes, "UTF-8");
+      } catch (UnsupportedEncodingException e) {
+        // not going ot happen
+        throw new RuntimeException(e);
+      }
+    } else {
+      authStringEnc = null;
+    }
   }
   
   public String getBaseURL() {
@@ -83,8 +102,7 @@ public class RestTestHarness extends BaseTestHarness {
    * @exception Exception any exception in the response.
    */
   public String query(String request) throws Exception {
-    URL url = new URL(getBaseURL() + request);
-    HttpURLConnection connection = (HttpURLConnection)url.openConnection();
+    HttpURLConnection connection = getURLConnection(request);
     InputStream inputStream = null;
     StringWriter strWriter;
     try {
@@ -110,8 +128,8 @@ public class RestTestHarness extends BaseTestHarness {
    * @return The response to the PUT request
    */
   public String put(String request, String content) throws IOException {
-    URL url = new URL(getBaseURL() + request);
-    HttpURLConnection connection = (HttpURLConnection)url.openConnection();
+    HttpURLConnection connection = getURLConnection(request);
+    
     connection.setDoOutput(true);
     connection.setRequestMethod("PUT");
     OutputStreamWriter out = new OutputStreamWriter(connection.getOutputStream(), "UTF-8");
@@ -142,8 +160,7 @@ public class RestTestHarness extends BaseTestHarness {
    * @return The response to the PUT request
    */
   public String post(String request, String content) throws IOException {
-    URL url = new URL(getBaseURL() + request);
-    HttpURLConnection connection = (HttpURLConnection)url.openConnection();
+    HttpURLConnection connection = getURLConnection(request);
     connection.setDoOutput(true);
     connection.setRequestMethod("POST");
     connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
@@ -201,5 +218,14 @@ public class RestTestHarness extends BaseTestHarness {
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
+  }
+  
+  private HttpURLConnection getURLConnection(String request) throws IOException {
+    URL url = new URL(getBaseURL() + request);
+    HttpURLConnection result = (HttpURLConnection)url.openConnection();
+    if (authStringEnc != null) {
+      result.setRequestProperty("Authorization", "Basic " + authStringEnc);
+    }
+    return result;
   }
 }

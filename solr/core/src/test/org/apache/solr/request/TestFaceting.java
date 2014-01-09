@@ -77,7 +77,7 @@ public class TestFaceting extends SolrTestCaseJ4 {
     //System.out.println("doTermEnum size=" + size);
     close();
     createIndex(size);
-    req = lrf.makeRequest("q","*:*");
+    req = lrf.makeRequestInfo("q","*:*").getReq();
 
     UnInvertedField uif = new UnInvertedField(proto.field(), req.getSearcher());
 

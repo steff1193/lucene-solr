@@ -26,6 +26,7 @@ import org.apache.solr.common.params.ModifiableSolrParams;
 import org.apache.solr.core.SolrCore;
 import org.apache.solr.request.LocalSolrQueryRequest;
 import org.apache.solr.request.SolrQueryRequest;
+import org.apache.solr.request.SolrRequestInfo;
 import org.apache.solr.response.SolrQueryResponse;
 import org.apache.solr.update.AddUpdateCommand;
 import org.apache.solr.update.CommitUpdateCommand;
@@ -62,8 +63,8 @@ public class UpdateProcessorTestBase extends SolrTestCaseJ4 {
     assertNotNull("No Chain named: " + chain, pc);
 
     SolrQueryResponse rsp = new SolrQueryResponse();
-
     SolrQueryRequest req = new LocalSolrQueryRequest(core, requestParams);
+    SolrRequestInfo.setRequestInfo(new SolrRequestInfo(req, rsp));
     try {
       AddUpdateCommand cmd = new AddUpdateCommand(req);
       cmd.solrDoc = docIn;
@@ -73,6 +74,7 @@ public class UpdateProcessorTestBase extends SolrTestCaseJ4 {
 
       return cmd.solrDoc;
     } finally {
+      SolrRequestInfo.clearRequestInfo();
       req.close();
     }
   }

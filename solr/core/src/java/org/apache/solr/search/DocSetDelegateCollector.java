@@ -17,7 +17,6 @@ package org.apache.solr.search;
  * limitations under the License.
  */
 
-import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.search.Collector;
 import org.apache.lucene.search.Scorer;
@@ -48,8 +47,8 @@ public class DocSetDelegateCollector extends DocSetCollector {
     // than scanning through a potentially huge bit vector.
     // FUTURE: when search methods all start returning docs in order, maybe
     // we could have a ListDocSet() and use the collected array directly.
-    if (pos < scratch.length) {
-      scratch[pos]=doc;
+    if (pos < smallSetSize) {
+      scratch.add(pos, doc);
     } else {
       // this conditional could be removed if BitSet was preallocated, but that
       // would take up more memory, and add more GC time...
@@ -62,12 +61,12 @@ public class DocSetDelegateCollector extends DocSetCollector {
 
   @Override
   public DocSet getDocSet() {
-    if (pos<=scratch.length) {
+    if (pos <= scratch.size()) {
       // assumes docs were collected in sorted order!
-      return new SortedIntDocSet(scratch, pos);
+      return new SortedIntDocSet(scratch.toArray(), pos);
     } else {
       // set the bits for ids that were collected in the array
-      for (int i=0; i<scratch.length; i++) bits.fastSet(scratch[i]);
+      scratch.copyTo(bits);
       return new BitDocSet(bits,pos);
     }
   }

@@ -22,11 +22,14 @@ import java.io.IOException;
 import org.apache.lucene.util.LuceneTestCase.Slow;
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrServerException;
+import org.apache.solr.client.solrj.SolrRequest.METHOD;
 import org.apache.solr.client.solrj.embedded.JettySolrRunner;
 import org.apache.solr.common.SolrInputDocument;
 import org.apache.solr.common.cloud.ZkStateReader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static org.apache.solr.client.solrj.embedded.JettySolrRunner.*;
 
 @Slow
 public class RecoveryZkTest extends AbstractFullDistribZkTestBase {
@@ -107,8 +110,8 @@ public class RecoveryZkTest extends AbstractFullDistribZkTestBase {
     
     SolrQuery query = new SolrQuery("*:*");
     query.setParam("distrib", "false");
-    long client1Docs = shardToJetty.get("shard1").get(0).client.solrClient.query(query).getResults().getNumFound();
-    long client2Docs = shardToJetty.get("shard1").get(1).client.solrClient.query(query).getResults().getNumFound();
+    long client1Docs = shardToJetty.get("shard1").get(0).client.solrClient.query(query, METHOD.GET, SEARCH_CREDENTIALS).getResults().getNumFound();
+    long client2Docs = shardToJetty.get("shard1").get(1).client.solrClient.query(query, METHOD.GET, SEARCH_CREDENTIALS).getResults().getNumFound();
     
     assertTrue(client1Docs > 0);
     assertEquals(client1Docs, client2Docs);
@@ -120,13 +123,13 @@ public class RecoveryZkTest extends AbstractFullDistribZkTestBase {
   @Override
   protected void indexDoc(SolrInputDocument doc) throws IOException,
       SolrServerException {
-    controlClient.add(doc);
+    controlClient.add(doc, -1, UPDATE_CREDENTIALS);
     
     // UpdateRequest ureq = new UpdateRequest();
     // ureq.add(doc);
     // ureq.setParam("update.chain", DISTRIB_UPDATE_CHAIN);
     // ureq.process(cloudClient);
-    cloudClient.add(doc);
+    cloudClient.add(doc, -1, UPDATE_CREDENTIALS);
   }
 
   

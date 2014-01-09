@@ -17,6 +17,31 @@
 
 package org.apache.solr.servlet;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Enumeration;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Set;
+import java.util.WeakHashMap;
+
+import javax.servlet.Filter;
+import javax.servlet.FilterChain;
+import javax.servlet.FilterConfig;
+import javax.servlet.ServletException;
+import javax.servlet.ServletRequest;
+import javax.servlet.ServletResponse;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
 import org.apache.commons.io.IOUtils;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.SolrException.ErrorCode;
@@ -28,57 +53,21 @@ import org.apache.solr.common.cloud.ZkCoreNodeProps;
 import org.apache.solr.common.cloud.ZkNodeProps;
 import org.apache.solr.common.cloud.ZkStateReader;
 import org.apache.solr.common.params.CommonParams;
-import org.apache.solr.common.params.MapSolrParams;
 import org.apache.solr.common.params.ModifiableSolrParams;
-import org.apache.solr.common.params.SolrParams;
-import org.apache.solr.common.util.ContentStreamBase;
-import org.apache.solr.common.util.NamedList;
-import org.apache.solr.common.util.SimpleOrderedMap;
 import org.apache.solr.common.util.StrUtils;
 import org.apache.solr.core.CoreContainer;
 import org.apache.solr.core.SolrConfig;
 import org.apache.solr.core.SolrCore;
 import org.apache.solr.handler.ContentStreamHandlerBase;
 import org.apache.solr.request.SolrQueryRequest;
-import org.apache.solr.request.SolrQueryRequestBase;
 import org.apache.solr.request.SolrRequestHandler;
 import org.apache.solr.request.SolrRequestInfo;
-import org.apache.solr.response.BinaryQueryResponseWriter;
 import org.apache.solr.response.QueryResponseWriter;
 import org.apache.solr.response.SolrQueryResponse;
 import org.apache.solr.servlet.cache.HttpCacheHeaderUtil;
 import org.apache.solr.servlet.cache.Method;
-import org.apache.solr.util.FastWriter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import javax.servlet.Filter;
-import javax.servlet.FilterChain;
-import javax.servlet.FilterConfig;
-import javax.servlet.ServletException;
-import javax.servlet.ServletRequest;
-import javax.servlet.ServletResponse;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.io.OutputStreamWriter;
-import java.io.Writer;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.nio.charset.Charset;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Enumeration;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Set;
-import java.util.WeakHashMap;
 
 /**
  * This filter looks at the incoming URL maps them to handlers defined in solrconfig.xml
@@ -95,8 +84,6 @@ public class SolrDispatchFilter implements Filter
   protected String abortErrorMessage = null;
   protected final Map<SolrConfig, SolrRequestParsers> parsers = new WeakHashMap<SolrConfig, SolrRequestParsers>();
   
-  private static final Charset UTF8 = Charset.forName("UTF-8");
-
   public SolrDispatchFilter() {
     try {
       log = LoggerFactory.getLogger(SolrDispatchFilter.class);
@@ -380,7 +367,7 @@ public class SolrDispatchFilter implements Filter
         log.debug("no handler or core retrieved for " + path + ", follow through...");
       } 
       catch (Throwable ex) {
-        sendError( core, solrReq, request, (HttpServletResponse)response, ex );
+        ResponseUtils.sendError( (HttpServletResponse)response, ex, null );
         return;
       } 
       finally {
@@ -497,9 +484,9 @@ public class SolrDispatchFilter implements Filter
         con.disconnect();
       }
     } catch (IOException e) {
-      sendError(null, solrReq, req, resp, new SolrException(
+      ResponseUtils.sendError(resp, new SolrException(
           SolrException.ErrorCode.SERVER_ERROR,
-          "Error trying to proxy request for url: " + coreUrl, e));
+          "Error trying to proxy request for url: " + coreUrl, e), null);
     }
     
   }
@@ -621,34 +608,7 @@ public class SolrDispatchFilter implements Filter
   private void writeResponse(SolrQueryResponse solrRsp, ServletResponse response,
                              QueryResponseWriter responseWriter, SolrQueryRequest solrReq, Method reqMethod)
           throws IOException {
-
-    // Now write it out
-    final String ct = responseWriter.getContentType(solrReq, solrRsp);
-    // don't call setContentType on null
-    if (null != ct) response.setContentType(ct); 
-
-    if (solrRsp.getException() != null) {
-      NamedList info = new SimpleOrderedMap();
-      int code = ResponseUtils.getErrorInfo(solrRsp.getException(), info, log);
-      solrRsp.add("error", info);
-      ((HttpServletResponse) response).setStatus(code);
-    }
-    
-    if (Method.HEAD != reqMethod) {
-      if (responseWriter instanceof BinaryQueryResponseWriter) {
-        BinaryQueryResponseWriter binWriter = (BinaryQueryResponseWriter) responseWriter;
-        binWriter.write(response.getOutputStream(), solrReq, solrRsp);
-      } else {
-        String charset = ContentStreamBase.getCharsetFromContentType(ct);
-        Writer out = (charset == null || charset.equalsIgnoreCase("UTF-8"))
-          ? new OutputStreamWriter(response.getOutputStream(), UTF8)
-          : new OutputStreamWriter(response.getOutputStream(), charset);
-        out = new FastWriter(out);
-        responseWriter.write(out, solrReq, solrRsp);
-        out.flush();
-      }
-    }
-    //else http HEAD request, nothing to write out, waited this long just to get ContentType
+    ResponseUtils.writeResponse(solrRsp, response, responseWriter, solrReq, reqMethod);
   }
   
   protected void execute( HttpServletRequest req, SolrRequestHandler handler, SolrQueryRequest sreq, SolrQueryResponse rsp) {
@@ -657,43 +617,6 @@ public class SolrDispatchFilter implements Filter
     // used for logging query stats in SolrCore.execute()
     sreq.getContext().put( "webapp", req.getContextPath() );
     sreq.getCore().execute( handler, sreq, rsp );
-  }
-
-  protected void sendError(SolrCore core, 
-      SolrQueryRequest req, 
-      ServletRequest request, 
-      HttpServletResponse response, 
-      Throwable ex) throws IOException {
-    try {
-      SolrQueryResponse solrResp = new SolrQueryResponse();
-      if(ex instanceof Exception) {
-        solrResp.setException((Exception)ex);
-      }
-      else {
-        solrResp.setException(new RuntimeException(ex));
-      }
-      if(core==null) {
-        core = cores.getCore(""); // default core
-      }
-      if(req==null) {
-        final SolrParams solrParams;
-        if (request instanceof HttpServletRequest) {
-          // use GET parameters if available:
-          solrParams = SolrRequestParsers.parseQueryString(((HttpServletRequest) request).getQueryString());
-        } else {
-          // we have no params at all, use empty ones:
-          solrParams = new MapSolrParams(Collections.<String,String>emptyMap());
-        }
-        req = new SolrQueryRequestBase(core, solrParams) {};
-      }
-      QueryResponseWriter writer = core.getQueryResponseWriter(req);
-      writeResponse(solrResp, response, writer, req, Method.GET);
-    }
-    catch( Throwable t ) { // This error really does not matter
-      SimpleOrderedMap info = new SimpleOrderedMap();
-      int code = ResponseUtils.getErrorInfo(ex, info, log);
-      response.sendError( code, info.toString() );
-    }
   }
 
   //---------------------------------------------------------------------

@@ -39,23 +39,23 @@ public class BufferingRequestProcessor extends UpdateRequestProcessor
   
   @Override
   public void processAdd(AddUpdateCommand cmd) throws IOException {
-    addCommands.add( cmd );
+    addCommands.add( (AddUpdateCommand)cmd.clone() );
   }
 
   @Override
   public void processDelete(DeleteUpdateCommand cmd) throws IOException {
-    deleteCommands.add( cmd );
+    deleteCommands.add( (DeleteUpdateCommand)cmd.clone() );
   }
 
   @Override
   public void processCommit(CommitUpdateCommand cmd) throws IOException {
-    commitCommands.add( cmd );
+    commitCommands.add( (CommitUpdateCommand)cmd.clone() );
   }
   
   @Override
   public void processRollback(RollbackUpdateCommand cmd) throws IOException
   {
-    rollbackCommands.add( cmd );
+    rollbackCommands.add( (RollbackUpdateCommand)cmd.clone() );
   }
 
   @Override

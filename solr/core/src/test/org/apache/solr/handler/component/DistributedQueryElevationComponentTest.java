@@ -25,6 +25,8 @@ import org.apache.solr.common.params.CommonParams;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 
+import static org.apache.solr.client.solrj.embedded.JettySolrRunner.*;
+
 /**
  * 
  */
@@ -78,13 +80,13 @@ public class DistributedQueryElevationComponentTest extends BaseDistributedSearc
     handle.put("shards", SKIP);
     handle.put("q", SKIP);
     handle.put("qt", SKIP);
-    query("q", "*:*", "qt", "/elevate", "shards.qt", "/elevate", "rows", "500", "sort", "id desc", CommonParams.FL, "id, score, [elevated]");
+    query(true, new String[]{"q", "*:*", "qt", "/elevate", "shards.qt", "/elevate", "rows", "500", "sort", "id desc", CommonParams.FL, "id, score, [elevated]"}, ALL_CREDENTIALS);
 
-    query("q", "ZZZZ", "qt", "/elevate", "shards.qt", "/elevate", "rows", "500", CommonParams.FL, "*, [elevated]", "forceElevation", "true", "sort", "int_i desc");
+    query(true, new String[]{"q", "ZZZZ", "qt", "/elevate", "shards.qt", "/elevate", "rows", "500", CommonParams.FL, "*, [elevated]", "forceElevation", "true", "sort", "int_i desc"}, ALL_CREDENTIALS);
     
-    query("q", "solr", "qt", "/elevate", "shards.qt", "/elevate", "rows", "500", CommonParams.FL, "*, [elevated]", "forceElevation", "true", "sort", "int_i asc");
+    query(true, new String[]{"q", "solr", "qt", "/elevate", "shards.qt", "/elevate", "rows", "500", CommonParams.FL, "*, [elevated]", "forceElevation", "true", "sort", "int_i asc"}, ALL_CREDENTIALS);
     
-    query("q", "ZZZZ", "qt", "/elevate", "shards.qt", "/elevate", "rows", "500", CommonParams.FL, "*, [elevated]", "forceElevation", "true", "sort", "id desc");
+    query(true, new String[]{"q", "ZZZZ", "qt", "/elevate", "shards.qt", "/elevate", "rows", "500", CommonParams.FL, "*, [elevated]", "forceElevation", "true", "sort", "id desc"}, ALL_CREDENTIALS);
   }
   
   @Override

@@ -19,7 +19,9 @@ package org.apache.solr.client.solrj.impl;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.ConnectException;
+import java.net.MalformedURLException;
 import java.net.SocketTimeoutException;
+import java.net.URL;
 import java.nio.charset.Charset;
 import java.util.Collection;
 import java.util.Iterator;
@@ -27,29 +29,43 @@ import java.util.LinkedList;
 import java.util.List;
 
 import org.apache.http.Header;
+import org.apache.http.HttpEntity;
+import org.apache.http.HttpHost;
 import org.apache.http.HttpResponse;
 import org.apache.http.HttpStatus;
 import org.apache.http.NameValuePair;
 import org.apache.http.NoHttpResponseException;
+import org.apache.http.auth.AuthScope;
+import org.apache.http.auth.UsernamePasswordCredentials;
+import org.apache.http.client.AuthCache;
+import org.apache.http.client.CredentialsProvider;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.entity.UrlEncodedFormEntity;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpRequestBase;
 import org.apache.http.client.params.ClientPNames;
+import org.apache.http.client.protocol.ClientContext;
 import org.apache.http.conn.ClientConnectionManager;
+import org.apache.http.entity.BufferedHttpEntity;
 import org.apache.http.entity.InputStreamEntity;
 import org.apache.http.entity.mime.FormBodyPart;
 import org.apache.http.entity.mime.HttpMultipartMode;
 import org.apache.http.entity.mime.MultipartEntity;
 import org.apache.http.entity.mime.content.InputStreamBody;
 import org.apache.http.entity.mime.content.StringBody;
+import org.apache.http.impl.auth.BasicScheme;
+import org.apache.http.impl.client.BasicAuthCache;
+import org.apache.http.impl.client.BasicCredentialsProvider;
 import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.http.message.BasicHeader;
 import org.apache.http.message.BasicNameValuePair;
+import org.apache.http.protocol.BasicHttpContext;
+import org.apache.http.protocol.HttpContext;
 import org.apache.http.util.EntityUtils;
 import org.apache.solr.client.solrj.ResponseParser;
 import org.apache.solr.client.solrj.SolrRequest;
+import org.apache.solr.client.solrj.SolrResponse;
 import org.apache.solr.client.solrj.SolrServer;
 import org.apache.solr.client.solrj.SolrServerException;
 import org.apache.solr.client.solrj.request.RequestWriter;
@@ -58,11 +74,14 @@ import org.apache.solr.client.solrj.response.UpdateResponse;
 import org.apache.solr.client.solrj.util.ClientUtils;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.SolrInputDocument;
+import org.apache.solr.common.exceptions.PartialErrors;
 import org.apache.solr.common.params.CommonParams;
 import org.apache.solr.common.params.ModifiableSolrParams;
 import org.apache.solr.common.params.SolrParams;
 import org.apache.solr.common.util.ContentStream;
 import org.apache.solr.common.util.NamedList;
+import org.apache.solr.security.AuthCredentials.AbstractAuthMethod;
+import org.apache.solr.security.AuthCredentials.BasicHttpAuth;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -70,6 +89,9 @@ public class HttpSolrServer extends SolrServer {
   private static final String UTF_8 = "UTF-8";
   private static final String DEFAULT_PATH = "/select";
   private static final long serialVersionUID = -946812319974801896L;
+  
+  public static final String HTTP_EXPLICIT_BODY_INCLUDED_HEADER_KEY = SolrResponse.HTTP_HEADER_KEY_PREFIX + "explicit-body-included";
+  
   /**
    * User-Agent String.
    */
@@ -124,7 +146,7 @@ public class HttpSolrServer extends SolrServer {
    *          standard distribution Solr webapp on your local machine.
    */
   public HttpSolrServer(String baseURL) {
-    this(baseURL, null, new BinaryResponseParser());
+    this(baseURL, null);
   }
   
   public HttpSolrServer(String baseURL, HttpClient client) {
@@ -207,6 +229,8 @@ public class HttpSolrServer extends SolrServer {
       wparams.add(invariantParams);
     }
     params = wparams;
+    
+    HttpContext context = getHttpContextForRequest(request);
     
     int tries = maxRetries + 1;
     try {
@@ -304,8 +328,7 @@ public class HttpSolrServer extends SolrServer {
                 contentStream[0] = content;
                 break;
               }
-              if (contentStream[0] instanceof RequestWriter.LazyContentStream) {
-                post.setEntity(new InputStreamEntity(contentStream[0].getStream(), -1) {
+              HttpEntity entity = new InputStreamEntity(contentStream[0].getStream(), -1) {
                   @Override
                   public Header getContentType() {
                     return new BasicHeader("Content-Type", contentStream[0].getContentType());
@@ -315,21 +338,11 @@ public class HttpSolrServer extends SolrServer {
                   public boolean isRepeatable() {
                     return false;
                   }
-                  
-                });
-              } else {
-                post.setEntity(new InputStreamEntity(contentStream[0].getStream(), -1) {
-                  @Override
-                  public Header getContentType() {
-                    return new BasicHeader("Content-Type", contentStream[0].getContentType());
-                  }
-                  
-                  @Override
-                  public boolean isRepeatable() {
-                    return false;
-                  }
-                });
+                };
+              if (credentialsButNonPreemptive(request, context)) {
+                entity = new BufferedHttpEntity(entity);
               }
+              post.setEntity(entity);
               method = post;
             }
           }
@@ -362,7 +375,7 @@ public class HttpSolrServer extends SolrServer {
     
     try {
       // Execute the method.
-      final HttpResponse response = httpClient.execute(method);
+      final HttpResponse response = (context != null)?httpClient.execute(method, context):httpClient.execute(method);
       int httpStatus = response.getStatusLine().getStatusCode();
       
       // Read the contents
@@ -372,7 +385,9 @@ public class HttpSolrServer extends SolrServer {
       switch (httpStatus) {
         case HttpStatus.SC_OK:
         case HttpStatus.SC_BAD_REQUEST:
-        case HttpStatus.SC_CONFLICT:  // 409
+        case HttpStatus.SC_CONFLICT:
+        case HttpStatus.SC_PRECONDITION_FAILED:
+        case HttpStatus.SC_UNPROCESSABLE_ENTITY:
           break;
         case HttpStatus.SC_MOVED_PERMANENTLY:
         case HttpStatus.SC_MOVED_TEMPORARILY:
@@ -385,14 +400,11 @@ public class HttpSolrServer extends SolrServer {
           throw new RemoteSolrException(httpStatus, "Server at " + getBaseURL()
               + " returned non ok status:" + httpStatus + ", message:"
               + response.getStatusLine().getReasonPhrase(), null);
+          
       }
       if (processor == null) {
-        // no processor specified, return raw stream
-        NamedList<Object> rsp = new NamedList<Object>();
-        rsp.add("stream", respBody);
         // Only case where stream should not be closed
         shouldClose = false;
-        return rsp;
       }
       
 //      if(true) {
@@ -404,26 +416,16 @@ public class HttpSolrServer extends SolrServer {
 //      }
       
       String charset = EntityUtils.getContentCharSet(response.getEntity());
-      NamedList<Object> rsp = processor.processResponse(respBody, charset);
       if (httpStatus != HttpStatus.SC_OK) {
-        String reason = null;
-        try {
-          NamedList err = (NamedList) rsp.get("error");
-          if (err != null) {
-            reason = (String) err.get("msg");
-            // TODO? get the trace?
-          }
-        } catch (Exception ex) {}
-        if (reason == null) {
-          StringBuilder msg = new StringBuilder();
-          msg.append(response.getStatusLine().getReasonPhrase());
-          msg.append("\n\n");
-          msg.append("request: " + method.getURI());
-          reason = java.net.URLDecoder.decode(msg.toString(), UTF_8);
-        }
-        throw new RemoteSolrException(httpStatus, reason, null);
+        StringBuilder additionalMsg = new StringBuilder();
+        additionalMsg.append( "\n\n" );
+        additionalMsg.append( "request: "+method.getURI() );
+        NamedList<Object> payload = (response.getFirstHeader(HTTP_EXPLICIT_BODY_INCLUDED_HEADER_KEY) != null)?getProcessedResponse(processor, respBody, charset):null;
+        SolrException ex = SolrException.decodeFromHttpMethod(response, "UTF-8", additionalMsg.toString(), payload);
+        throw ex;
       }
-      return rsp;
+      
+      return getProcessedResponse(processor, respBody, charset);
     } catch (ConnectException e) {
       throw new SolrServerException("Server refused connection at: "
           + getBaseURL(), e);
@@ -440,6 +442,57 @@ public class HttpSolrServer extends SolrServer {
           respBody.close();
         } catch (Throwable t) {} // ignore
       }
+    }
+  }
+  
+  public HttpContext getHttpContextForRequest(SolrRequest request) {
+    // Adding request-level basic-auth credentials to the request
+    HttpContext context = null;
+    if (request.getAuthCredentials() != null && request.getAuthCredentials().getAuthMethods().size() > 0) {
+      context = new BasicHttpContext();
+      CredentialsProvider credentialsProvider = new BasicCredentialsProvider();
+      request.getAuthCredentials().applyToCredentialsProvider(credentialsProvider);
+      context.setAttribute(ClientContext.CREDS_PROVIDER, credentialsProvider);
+    }
+    // Set up cache for preemptive authentication if that is required
+    if (request.getPreemptiveAuthentication()) {
+      AuthCache authCache = new BasicAuthCache();
+      BasicScheme basicAuth = new BasicScheme();
+      String baseURL = getBaseURL();
+      try {
+        URL url = new URL(baseURL);
+        String scheme = url.getProtocol();
+        String ip = url.getHost();
+        int port = url.getPort();
+        HttpHost targetHost = new HttpHost(ip, port, scheme);
+        authCache.put(targetHost, basicAuth);
+        
+        if (context == null) context = new BasicHttpContext();
+        context.setAttribute(ClientContext.AUTH_CACHE, authCache);
+      } catch (MalformedURLException e) {
+        log.error("Not able to add preemptive authentication", e);
+      }
+    }
+    return context;
+  }
+  
+  private boolean credentialsButNonPreemptive(SolrRequest request, HttpContext context) {
+    boolean nonPreemptive = !request.getPreemptiveAuthentication();
+    CredentialsProvider contextCredentialsProvier = (context != null)?(CredentialsProvider)context.getAttribute(ClientContext.CREDS_PROVIDER):null;
+    boolean contextCredentials = (contextCredentialsProvier != null && contextCredentialsProvier.getCredentials(AuthScope.ANY) != null);
+    CredentialsProvider httpClientCredentialsProvider = HttpClientUtil.getCredentialsProvider(httpClient);
+    boolean httpClientCredentials = (httpClientCredentialsProvider != null && httpClientCredentialsProvider.getCredentials(AuthScope.ANY) != null);
+    return nonPreemptive && (contextCredentials || httpClientCredentials);
+  }
+  
+  private NamedList<Object> getProcessedResponse(final ResponseParser processor, InputStream respBody, String charset) {
+    if (processor == null) {
+      // no processor specified, return raw stream
+      NamedList<Object> rsp = new NamedList<Object>();
+      rsp.add("stream", respBody);
+      return rsp;
+    } else {
+      return processor.processResponse(respBody, charset);
     }
   }
   

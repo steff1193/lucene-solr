@@ -29,6 +29,7 @@ import org.apache.solr.common.util.ContentStream;
 import org.apache.solr.common.util.ContentStreamBase;
 import org.apache.solr.common.util.StrUtils;
 import org.apache.solr.common.util.XMLErrorLogger;
+import org.apache.solr.common.RequestPart;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.SolrInputDocument;
 import org.apache.solr.common.params.CommonParams;
@@ -224,13 +225,13 @@ public class XMLLoader extends ContentStreamLoader {
 
             // First look for commitWithin parameter on the request, will be overwritten for individual <add>'s
             addCmd.commitWithin = params.getInt(UpdateParams.COMMIT_WITHIN, -1);
-            addCmd.overwrite = params.getBool(UpdateParams.OVERWRITE, true);
+            addCmd.classicOverwrite = params.getBool(UpdateParams.OVERWRITE, true);
             
             for (int i = 0; i < parser.getAttributeCount(); i++) {
               String attrName = parser.getAttributeLocalName(i);
               String attrVal = parser.getAttributeValue(i);
               if (UpdateRequestHandler.OVERWRITE.equals(attrName)) {
-                addCmd.overwrite = StrUtils.parseBoolean(attrVal);
+                addCmd.classicOverwrite = StrUtils.parseBoolean(attrVal);
               } else if (UpdateRequestHandler.COMMIT_WITHIN.equals(attrName)) {
                 addCmd.commitWithin = Integer.parseInt(attrVal);
               } else {
@@ -325,6 +326,7 @@ public class XMLLoader extends ContentStreamLoader {
               String attrVal = parser.getAttributeValue(i);
               if (UpdateRequestHandler.VERSION.equals(attrName)) {
                 deleteCmd.setVersion(Long.parseLong(attrVal));
+                deleteCmd.setRequestVersion(deleteCmd.getVersion());
               }
             }
           }
@@ -364,21 +366,27 @@ public class XMLLoader extends ContentStreamLoader {
    * @since solr 1.3
    */
   public SolrInputDocument readDoc(XMLStreamReader parser) throws XMLStreamException {
-    SolrInputDocument doc = new SolrInputDocument();
-
+    String partRef = null;
+    float boost = Float.MIN_VALUE;
     String attrName = "";
     for (int i = 0; i < parser.getAttributeCount(); i++) {
       attrName = parser.getAttributeLocalName(i);
       if ("boost".equals(attrName)) {
-        doc.setDocumentBoost(Float.parseFloat(parser.getAttributeValue(i)));
+        boost = Float.parseFloat(parser.getAttributeValue(i));
+      } else if (RequestPart.PART_REF_KEY.equals(attrName)) {
+        partRef = parser.getAttributeValue(i);      
       } else {
         log.warn("Unknown attribute doc/@" + attrName);
       }
     }
+    SolrInputDocument doc = new SolrInputDocument(partRef);
+    if (boost != Float.MIN_VALUE) {
+      doc.setDocumentBoost(boost);
+    }
 
     StringBuilder text = new StringBuilder();
     String name = null;
-    float boost = 1.0f;
+    boost = 1.0f;
     boolean isNull = false;
     String update = null;
     Map<String, Map<String, Object>> updateMap = null;

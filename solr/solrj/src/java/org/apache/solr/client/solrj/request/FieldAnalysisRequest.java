@@ -37,7 +37,7 @@ import java.util.List;
  *
  * @since solr.14
  */
-public class FieldAnalysisRequest extends SolrRequest {
+public class FieldAnalysisRequest extends SolrRequest<FieldAnalysisResponse> {
 
   private String fieldValue;
   private String query;
@@ -102,11 +102,7 @@ public class FieldAnalysisRequest extends SolrRequest {
     if (fieldValue == null) {
       throw new IllegalStateException("The field value must be set");
     }
-    long startTime = System.currentTimeMillis();
-    FieldAnalysisResponse res = new FieldAnalysisResponse();
-    res.setResponse(server.request(this));
-    res.setElapsedTime(System.currentTimeMillis() - startTime);
-    return res;
+    return super.process(server);
   }
 
 

@@ -57,6 +57,7 @@ import org.apache.solr.common.SolrDocumentList;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.SolrInputDocument;
 import org.apache.solr.common.util.NamedList;
+import org.apache.solr.common.exceptions.update.VersionConflict;
 import org.apache.solr.common.params.AnalysisParams;
 import org.apache.solr.common.params.CommonParams;
 import org.apache.solr.common.params.FacetParams;
@@ -437,7 +438,7 @@ abstract public class SolrExampleTests extends SolrJettyTestBase
     doc4.addField( "id", "id4", 1.0f );
     doc4.addField( "name", "doc4", 1.0f );
     doc4.addField( "price", 10 );
-    server.add(doc4, 500);
+    server.add(doc4, 500, null);
     
     Thread.sleep( 1000 ); // wait 1 sec
 
@@ -522,7 +523,7 @@ abstract public class SolrExampleTests extends SolrJettyTestBase
     }
     catch(SolrException ex) {
       assertEquals(400, ex.code());
-      assertEquals("Invalid Number: ignore_exception", ex.getMessage());  // The reason should get passed through
+      assertTrue(ex.getMessage().startsWith("Invalid Number: ignore_exception"));  // The reason should get passed through
     }
     catch(Throwable t) {
       t.printStackTrace();
@@ -1256,7 +1257,7 @@ abstract public class SolrExampleTests extends SolrJettyTestBase
         assertEquals( "should have score", new Float(1.0), score );
       }
      
-    });
+    }, null);
     assertEquals(10, cnt.get() );
   }
 
@@ -1356,10 +1357,11 @@ abstract public class SolrExampleTests extends SolrJettyTestBase
         fail("Operation should throw an exception!");
       } else {
         server.commit(); //just to be sure the client has sent the doc
-        assertTrue("CUSS did not report an error", ((Throwable)getCUSSExceptionField(server).get(server)).getMessage().contains("Conflict"));
+        Throwable t = ((Throwable)getCUSSExceptionField(server).get(server));
+        assertTrue("CUSS did not report an error", t != null && (t instanceof VersionConflict) && t.getMessage().contains("Attempt to update document with uniqueKey unique failed. Version in document to be updated " + (version+1) + " does not match current version " + version));
       }
     } catch (SolrException se) {
-      assertTrue("No identifiable error message", se.getMessage().contains("version conflict for unique"));
+      assertTrue("No identifiable error message", (se instanceof VersionConflict) && se.getMessage().contains("Attempt to update document with uniqueKey unique failed. Version in document to be updated " + (version+1) + " does not match current version " + version));
     }
     
     //update "price", use correct version (optimistic locking)

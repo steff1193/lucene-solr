@@ -142,11 +142,17 @@ public class LBHttpSolrServer extends SolrServer {
     protected SolrRequest request;
     protected List<String> servers;
     protected int numDeadServersToTry;
+    protected HttpClient httpClient;
 
     public Req(SolrRequest request, List<String> servers) {
+      this(request, servers, null);
+    }
+    
+    public Req(SolrRequest request, List<String> servers, HttpClient httpClient) {
       this.request = request;
       this.servers = servers;
       this.numDeadServersToTry = servers.size();
+      this.httpClient = httpClient;
     }
 
     public SolrRequest getRequest() {
@@ -165,6 +171,10 @@ public class LBHttpSolrServer extends SolrServer {
      * Defaults to the number of servers in this request. */
     public void setNumDeadServersToTry(int numDeadServersToTry) {
       this.numDeadServersToTry = numDeadServersToTry;
+    }
+
+    public HttpClient getHttpClient() {
+      return httpClient;
     }
   }
 
@@ -219,9 +229,12 @@ public class LBHttpSolrServer extends SolrServer {
   }
 
   protected HttpSolrServer makeServer(String server) throws MalformedURLException {
-    return new HttpSolrServer(server, httpClient, parser);
+    return makeServer(server, null);
   }
 
+  protected HttpSolrServer makeServer(String server, HttpClient httpClient) throws MalformedURLException {
+    return new HttpSolrServer(server, (httpClient == null)?this.httpClient:httpClient, parser);
+  }
 
 
   /**
@@ -258,13 +271,13 @@ public class LBHttpSolrServer extends SolrServer {
         continue;
       }
       rsp.server = serverStr;
-      HttpSolrServer server = makeServer(serverStr);
+      HttpSolrServer server = makeServer(serverStr, req.httpClient);
 
       try {
         rsp.rsp = server.request(req.getRequest());
         return rsp; // SUCCESS
       } catch (SolrException e) {
-        // we retry on 404 or 403 or 503 - you can see this on solr shutdown
+        // we retry on 404 or 403 or 503 or 500 - you can see this on solr shutdown
         if (e.code() == 404 || e.code() == 403 || e.code() == 503 || e.code() == 500) {
           ex = addZombie(server, e);
         } else {
@@ -295,11 +308,12 @@ public class LBHttpSolrServer extends SolrServer {
     // try the servers we previously skipped
     for (ServerWrapper wrapper : skipped) {
       try {
-        rsp.rsp = wrapper.solrServer.request(req.getRequest());
+        HttpSolrServer server = (req.httpClient != wrapper.solrServer.getHttpClient())?makeServer(wrapper.getKey(), req.httpClient):wrapper.solrServer;
+        rsp.rsp = server.request(req.getRequest());
         zombieServers.remove(wrapper.getKey());
         return rsp; // SUCCESS
       } catch (SolrException e) {
-        // we retry on 404 or 403 or 503 - you can see this on solr shutdown
+        // we retry on 404 or 403 or 503 or 500 - you can see this on solr shutdown
         if (e.code() == 404 || e.code() == 403 || e.code() == 503 || e.code() == 500) {
           ex = e;
           // already a zombie, no need to re-add

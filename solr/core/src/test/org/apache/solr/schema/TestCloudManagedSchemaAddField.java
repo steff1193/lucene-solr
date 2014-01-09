@@ -16,6 +16,9 @@ package org.apache.solr.schema;
  * limitations under the License.
  */
 
+import static org.apache.solr.client.solrj.embedded.JettySolrRunner.ALL_USERNAME;
+import static org.apache.solr.client.solrj.embedded.JettySolrRunner.ALL_PASSWORD;
+
 import org.apache.solr.client.solrj.impl.HttpSolrServer;
 import org.apache.solr.cloud.AbstractFullDistribZkTestBase;
 import org.apache.solr.util.BaseTestHarness;
@@ -66,7 +69,7 @@ public class TestCloudManagedSchemaAddField extends AbstractFullDistribZkTestBas
         public String getBaseURL() {
           return client.getBaseURL();
         }
-      });
+      }, ALL_USERNAME, ALL_PASSWORD);
       restTestHarnesses.add(harness);
     }
   }

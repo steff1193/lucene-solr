@@ -17,6 +17,10 @@ package org.apache.solr.cloud;
  * limitations under the License.
  */
 
+import static org.apache.solr.client.solrj.embedded.JettySolrRunner.ALL_CREDENTIALS;
+import static org.apache.solr.client.solrj.embedded.JettySolrRunner.UPDATE_CREDENTIALS;
+import static org.apache.solr.client.solrj.embedded.JettySolrRunner.SEARCH_CREDENTIALS;
+
 import java.io.File;
 import java.io.IOException;
 import java.util.Random;
@@ -24,9 +28,10 @@ import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
-import org.apache.lucene.util.LuceneTestCase.Slow;
 import org.apache.lucene.util.Constants;
+import org.apache.lucene.util.LuceneTestCase.Slow;
 import org.apache.solr.client.solrj.SolrQuery;
+import org.apache.solr.client.solrj.SolrRequest.METHOD;
 import org.apache.solr.client.solrj.SolrServer;
 import org.apache.solr.client.solrj.SolrServerException;
 import org.apache.solr.client.solrj.impl.HttpSolrServer;
@@ -93,6 +98,7 @@ public class UnloadDistributedZkTest extends BasicDistributedZkTest {
         + System.currentTimeMillis() + collection + "1";
     createCmd.setDataDir(getDataDir(coreDataDir));
     createCmd.setNumShards(2);
+    createCmd.setAuthCredentials(ALL_CREDENTIALS);
     
     SolrServer client = clients.get(0);
     String url1 = getBaseUrl(client);
@@ -108,6 +114,7 @@ public class UnloadDistributedZkTest extends BasicDistributedZkTest {
     coreDataDir = dataDir.getAbsolutePath() + File.separator
         + System.currentTimeMillis() + collection + "2";
     createCmd.setDataDir(getDataDir(coreDataDir));
+    createCmd.setAuthCredentials(ALL_CREDENTIALS);
     
     server.request(createCmd);
     
@@ -117,6 +124,7 @@ public class UnloadDistributedZkTest extends BasicDistributedZkTest {
     // now unload one of the two
     Unload unloadCmd = new Unload(false);
     unloadCmd.setCoreName("test_unload_shard_and_collection_2");
+    unloadCmd.setAuthCredentials(ALL_CREDENTIALS);
     server.request(unloadCmd);
     
     // there should be only one shard
@@ -139,6 +147,7 @@ public class UnloadDistributedZkTest extends BasicDistributedZkTest {
     // now unload one of the other
     unloadCmd = new Unload(false);
     unloadCmd.setCoreName("test_unload_shard_and_collection_1");
+    unloadCmd.setAuthCredentials(ALL_CREDENTIALS);
     server.request(unloadCmd);
     
     //printLayout();
@@ -172,6 +181,7 @@ public class UnloadDistributedZkTest extends BasicDistributedZkTest {
     createCmd.setNumShards(1);
     String core1DataDir = dataDir.getAbsolutePath() + File.separator + System.currentTimeMillis() + "unloadcollection1" + "_1n";
     createCmd.setDataDir(getDataDir(core1DataDir));
+    createCmd.setAuthCredentials(ALL_CREDENTIALS);
     server.request(createCmd);
     
     ZkStateReader zkStateReader = getCommonCloudSolrServer().getZkStateReader();
@@ -190,6 +200,7 @@ public class UnloadDistributedZkTest extends BasicDistributedZkTest {
     createCmd.setCollection("unloadcollection");
     String core2dataDir = dataDir.getAbsolutePath() + File.separator + System.currentTimeMillis() + "unloadcollection1" + "_2n";
     createCmd.setDataDir(getDataDir(core2dataDir));
+    createCmd.setAuthCredentials(ALL_CREDENTIALS);
     server.request(createCmd);
     
     zkStateReader.updateClusterState(true);
@@ -212,10 +223,10 @@ public class UnloadDistributedZkTest extends BasicDistributedZkTest {
           "humpty dumpy3 sat on a walls");
       SolrInputDocument doc3 = getDoc(id, 8, i1, -600, tlong, 600, t1,
           "humpty dumpy2 sat on a walled");
-      collectionClient.add(doc1);
-      collectionClient.add(doc2);
-      collectionClient.add(doc3);
-      collectionClient.commit();
+      collectionClient.add(doc1, -1, UPDATE_CREDENTIALS);
+      collectionClient.add(doc2, -1, UPDATE_CREDENTIALS);
+      collectionClient.add(doc3, -1, UPDATE_CREDENTIALS);
+      collectionClient.commit(true, true, false, UPDATE_CREDENTIALS);
     }
 
     // create another replica for our collection
@@ -228,6 +239,7 @@ public class UnloadDistributedZkTest extends BasicDistributedZkTest {
     createCmd.setCollection("unloadcollection");
     String core3dataDir = dataDir.getAbsolutePath() + File.separator + System.currentTimeMillis() + "unloadcollection" + "_3n";
     createCmd.setDataDir(getDataDir(core3dataDir));
+    createCmd.setAuthCredentials(ALL_CREDENTIALS);
     server.request(createCmd);
     
     waitForRecoveriesToFinish("unloadcollection", zkStateReader, false);
@@ -242,11 +254,11 @@ public class UnloadDistributedZkTest extends BasicDistributedZkTest {
     for (int x = 20; x < 100; x++) {
       SolrInputDocument doc1 = getDoc(id, x, i1, -600, tlong, 600, t1,
           "humpty dumpy sat on a wall");
-      addClient.add(doc1);
+      addClient.add(doc1, -1, UPDATE_CREDENTIALS);
     }
 
     // don't commit so they remain in the tran log
-    //collectionClient.commit();
+    //collectionClient.commit(true, true, false, UPDATE_CREDENTIALS);
     
     // unload the leader
     collectionClient = new HttpSolrServer(leaderProps.getBaseUrl());
@@ -255,6 +267,7 @@ public class UnloadDistributedZkTest extends BasicDistributedZkTest {
     
     Unload unloadCmd = new Unload(false);
     unloadCmd.setCoreName(leaderProps.getCoreName());
+    unloadCmd.setAuthCredentials(ALL_CREDENTIALS);
     ModifiableSolrParams p = (ModifiableSolrParams) unloadCmd.getParams();
 
     collectionClient.request(unloadCmd);
@@ -281,7 +294,7 @@ public class UnloadDistributedZkTest extends BasicDistributedZkTest {
     for (int x = 101; x < 200; x++) {
       SolrInputDocument doc1 = getDoc(id, x, i1, -600, tlong, 600, t1,
           "humpty dumpy sat on a wall");
-      addClient.add(doc1);
+      addClient.add(doc1, -1, UPDATE_CREDENTIALS);
     }
     
     
@@ -297,6 +310,7 @@ public class UnloadDistributedZkTest extends BasicDistributedZkTest {
     createCmd.setCollection("unloadcollection");
     String core4dataDir = dataDir.getAbsolutePath() + File.separator + System.currentTimeMillis() + "unloadcollection" + "_4n";
     createCmd.setDataDir(getDataDir(core4dataDir));
+    createCmd.setAuthCredentials(ALL_CREDENTIALS);
     server.request(createCmd);
     
     waitForRecoveriesToFinish("unloadcollection", zkStateReader, false);
@@ -310,6 +324,7 @@ public class UnloadDistributedZkTest extends BasicDistributedZkTest {
     unloadCmd = new Unload(false);
     unloadCmd.setCoreName(leaderProps.getCoreName());
     p = (ModifiableSolrParams) unloadCmd.getParams();
+    unloadCmd.setAuthCredentials(ALL_CREDENTIALS);
     collectionClient.request(unloadCmd);
     
     tries = 50;
@@ -335,6 +350,7 @@ public class UnloadDistributedZkTest extends BasicDistributedZkTest {
     createCmd.setCoreName(leaderProps.getCoreName());
     createCmd.setCollection("unloadcollection");
     createCmd.setDataDir(getDataDir(core1DataDir));
+    createCmd.setAuthCredentials(ALL_CREDENTIALS);
     server.request(createCmd);
 
     waitForRecoveriesToFinish("unloadcollection", zkStateReader, false);
@@ -342,24 +358,24 @@ public class UnloadDistributedZkTest extends BasicDistributedZkTest {
     server = new HttpSolrServer(url2 + "/unloadcollection");
     server.setConnectionTimeout(15000);
     server.setSoTimeout(30000);
-    server.commit();
+    server.commit(true, true, false, UPDATE_CREDENTIALS);
     SolrQuery q = new SolrQuery("*:*");
     q.set("distrib", false);
-    long found1 = server.query(q).getResults().getNumFound();
+    long found1 = server.query(q, METHOD.GET, SEARCH_CREDENTIALS).getResults().getNumFound();
     server = new HttpSolrServer(url3 + "/unloadcollection");
     server.setConnectionTimeout(15000);
     server.setSoTimeout(30000);
-    server.commit();
+    server.commit(true, true, false, UPDATE_CREDENTIALS);
     q = new SolrQuery("*:*");
     q.set("distrib", false);
-    long found3 = server.query(q).getResults().getNumFound();
+    long found3 = server.query(q, METHOD.GET, SEARCH_CREDENTIALS).getResults().getNumFound();
     server = new HttpSolrServer(url4 + "/unloadcollection");
     server.setConnectionTimeout(15000);
     server.setSoTimeout(30000);
-    server.commit();
+    server.commit(true, true, false, UPDATE_CREDENTIALS);
     q = new SolrQuery("*:*");
     q.set("distrib", false);
-    long found4 = server.query(q).getResults().getNumFound();
+    long found4 = server.query(q, METHOD.GET, SEARCH_CREDENTIALS).getResults().getNumFound();
     
     // all 3 shards should now have the same number of docs
     assertEquals(found1, found3);
@@ -393,6 +409,7 @@ public class UnloadDistributedZkTest extends BasicDistributedZkTest {
         public void run() {
           Unload unloadCmd = new Unload(true);
           unloadCmd.setCoreName("multiunload" + freezeJ);
+          unloadCmd.setAuthCredentials(ALL_CREDENTIALS);
           try {
             server.request(unloadCmd);
           } catch (SolrServerException e) {

@@ -21,7 +21,7 @@ import org.apache.solr.common.params.ModifiableSolrParams;
 
 public abstract class ShardHandler {
   public abstract void checkDistributed(ResponseBuilder rb);
-  public abstract void submit(ShardRequest sreq, String shard, ModifiableSolrParams params) ;
+  public abstract void submit(ShardRequest sreq, String nodeUrlsWithoutProtocolPart, ModifiableSolrParams params) ;
   public abstract ShardResponse takeCompletedIncludingErrors();
   public abstract ShardResponse takeCompletedOrError();
   public abstract void cancelAll();

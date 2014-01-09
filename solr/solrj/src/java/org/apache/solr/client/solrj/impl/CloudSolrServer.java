@@ -42,11 +42,16 @@ import org.apache.solr.common.SolrException;
 import org.apache.solr.common.SolrException.ErrorCode;
 import org.apache.solr.common.cloud.Aliases;
 import org.apache.solr.common.cloud.ClusterState;
+import org.apache.solr.common.cloud.DocCollection;
+import org.apache.solr.common.cloud.DocRouter;
+import org.apache.solr.common.cloud.ImplicitDocRouter;
+import org.apache.solr.common.cloud.Replica;
 import org.apache.solr.common.cloud.Slice;
 import org.apache.solr.common.cloud.ZkCoreNodeProps;
 import org.apache.solr.common.cloud.ZkNodeProps;
 import org.apache.solr.common.cloud.ZkStateReader;
 import org.apache.solr.common.cloud.ZooKeeperException;
+import org.apache.solr.common.params.CommonParams;
 import org.apache.solr.common.params.ModifiableSolrParams;
 import org.apache.solr.common.params.SolrParams;
 import org.apache.solr.common.util.NamedList;
@@ -179,6 +184,32 @@ public class CloudSolrServer extends SolrServer {
     }
   }
 
+  private String getRealtimeGetUrl(String collection, ClusterState clusterState, String id) {
+    //Check to see if the collection is an alias.
+    Aliases aliases = zkStateReader.getAliases();
+    if(aliases != null) {
+      Map<String, String> collectionAliases = aliases.getCollectionAliasMap();
+      if(collectionAliases != null && collectionAliases.containsKey(collection)) {
+        collection = collectionAliases.get(collection);
+      }
+    }
+
+    DocCollection col = clusterState.getCollection(collection);
+
+    DocRouter router = col.getRouter();
+    
+    if (router instanceof ImplicitDocRouter) {
+      throw new SolrException(ErrorCode.PRECONDITION_FAILED, "Automatically routed realtime-get in cloud not supported for " + ImplicitDocRouter.class.getName() + " routers");
+    }
+    
+    Slice slice = router.getTargetSlice(id.toString(), null, null, col);
+    if (slice == null) {
+      return null;
+    }
+    
+    return slice.getLeader().getStr(ZkStateReader.BASE_URL_PROP) + "/" + slice.getLeader().getStr("core");
+  }
+
   @Override
   public NamedList<Object> request(SolrRequest request)
       throws SolrServerException, IOException {
@@ -216,6 +247,11 @@ public class CloudSolrServer extends SolrServer {
             "No collection param specified on request and no default collection has been set.");
       }
       
+      // Trying to send real-time gets directly to the node running the leader-replica of the shard where the document ought to live
+      String id = null;
+      if (reqParams.get(CommonParams.QT) != null && reqParams.get(CommonParams.QT).equals("/get") && ((id = reqParams.get("id")) != null)) {
+        theUrlList.add(getRealtimeGetUrl(collection, clusterState, id));
+      } else {
       Set<String> collectionsList = getCollectionList(clusterState, collection);
       if (collectionsList.size() == 0) {
         throw new SolrException(ErrorCode.BAD_REQUEST, "Could not find collection: " + collection);
@@ -309,6 +345,7 @@ public class CloudSolrServer extends SolrServer {
           theUrlList.addAll(theReplicas);
         }
       }
+    }
     }
     
     // System.out.println("########################## MAKING REQUEST TO " +

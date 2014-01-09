@@ -18,6 +18,7 @@
 package org.apache.solr.request;
 
 import org.apache.solr.search.SolrIndexSearcher;
+import org.apache.solr.security.AuthCredentials;
 import org.apache.solr.util.RefCounted;
 import org.apache.solr.schema.IndexSchema;
 import org.apache.solr.common.params.SolrParams;
@@ -47,11 +48,17 @@ public abstract class SolrQueryRequestBase implements SolrQueryRequest {
   protected SolrParams params;
   protected Map<Object,Object> context;
   protected Iterable<ContentStream> streams;
+  protected AuthCredentials authCredentials;
 
   public SolrQueryRequestBase(SolrCore core, SolrParams params) {
+    this(core, params, null);
+  }
+  
+  public SolrQueryRequestBase(SolrCore core, SolrParams params, AuthCredentials authCredentials) {
     this.core = core;
     this.schema = null == core ? null : core.getLatestSchema();
     this.params = this.origParams = params;
+    this.authCredentials = authCredentials;
   }
 
   @Override
@@ -87,7 +94,7 @@ public abstract class SolrQueryRequestBase implements SolrQueryRequest {
   protected RefCounted<SolrIndexSearcher> searcherHolder;
   @Override
   public SolrIndexSearcher getSearcher() {
-    if(core == null) return null;//a request for a core admin will not have a core
+    if(core == null) return null;//a request for a core admin will no have a core
     // should this reach out and get a searcher from the core singleton, or
     // should the core populate one in a factory method to create requests?
     // or there could be a setSearcher() method that Solr calls
@@ -143,6 +150,11 @@ public abstract class SolrQueryRequestBase implements SolrQueryRequest {
   @Override
   public String getParamString() {
     return origParams.toString();
+  }
+
+  @Override
+  public AuthCredentials getAuthCredentials() {
+    return authCredentials;
   }
 
   @Override

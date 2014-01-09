@@ -56,6 +56,7 @@ import org.apache.solr.request.SolrQueryRequest;
 import org.apache.solr.request.SolrRequestInfo;
 import org.apache.solr.response.SolrQueryResponse;
 import org.apache.solr.search.SolrIndexSearcher;
+import org.apache.solr.security.InterSolrNodeAuthCredentialsFactory.AuthCredentialsSource;
 import org.apache.solr.update.processor.DistributedUpdateProcessor;
 import org.apache.solr.update.processor.UpdateRequestProcessor;
 import org.apache.solr.update.processor.UpdateRequestProcessorChain;
@@ -1192,6 +1193,7 @@ public class UpdateLog implements PluginInfoInitialized {
       params.set(DISTRIB_UPDATE_PARAM, FROMLEADER.toString());
       params.set(DistributedUpdateProcessor.LOG_REPLAY, "true");
       req = new LocalSolrQueryRequest(uhandler.core, params);
+      ((LocalSolrQueryRequest)req).setAuthCredentials(AuthCredentialsSource.useInternalAuthCredentials().getAuthCredentials());
       rsp = new SolrQueryResponse();
       SolrRequestInfo.setRequestInfo(new SolrRequestInfo(req, rsp));    // setting request info will help logging
 
@@ -1307,6 +1309,7 @@ public class UpdateLog implements PluginInfoInitialized {
                 // cmd.setIndexedId(new BytesRef(idBytes));
                 cmd.solrDoc = sdoc;
                 cmd.setVersion(version);
+                cmd.setRequestVersion(version);
                 cmd.setFlags(UpdateCommand.REPLAY | UpdateCommand.IGNORE_AUTOCOMMIT);
                 if (debug) log.debug("add " +  cmd);
 
@@ -1320,6 +1323,7 @@ public class UpdateLog implements PluginInfoInitialized {
                 DeleteUpdateCommand cmd = new DeleteUpdateCommand(req);
                 cmd.setIndexedId(new BytesRef(idBytes));
                 cmd.setVersion(version);
+                cmd.setRequestVersion(version);
                 cmd.setFlags(UpdateCommand.REPLAY | UpdateCommand.IGNORE_AUTOCOMMIT);
                 if (debug) log.debug("delete " +  cmd);
                 proc.processDelete(cmd);
@@ -1333,6 +1337,7 @@ public class UpdateLog implements PluginInfoInitialized {
                 DeleteUpdateCommand cmd = new DeleteUpdateCommand(req);
                 cmd.query = query;
                 cmd.setVersion(version);
+                cmd.setRequestVersion(version);
                 cmd.setFlags(UpdateCommand.REPLAY | UpdateCommand.IGNORE_AUTOCOMMIT);
                 if (debug) log.debug("deleteByQuery " +  cmd);
                 proc.processDelete(cmd);
@@ -1349,9 +1354,10 @@ public class UpdateLog implements PluginInfoInitialized {
                 throw new SolrException(SolrException.ErrorCode.SERVER_ERROR,  "Unknown Operation! " + oper);
             }
 
-            if (rsp.getException() != null) {
-              loglog.error("REPLAY_ERR: Exception replaying log", rsp.getException());
-              throw rsp.getException();
+            Exception e;
+            if ((e = rsp.getException()) != null) {
+              loglog.error("REPLAY_ERR: Exception replaying log", e);
+              throw e;
             }
           } catch (IOException ex) {
             recoveryInfo.errors++;
@@ -1377,6 +1383,7 @@ public class UpdateLog implements PluginInfoInitialized {
 
         CommitUpdateCommand cmd = new CommitUpdateCommand(req, false);
         cmd.setVersion(commitVersion);
+        cmd.setRequestVersion(commitVersion);
         cmd.softCommit = false;
         cmd.waitSearcher = true;
         cmd.setFlags(UpdateCommand.REPLAY);

@@ -18,18 +18,21 @@
 package org.apache.solr.client.solrj.embedded;
 
 import java.io.IOException;
-import java.util.Collections;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.security.Principal;
+import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.LinkedList;
-import java.util.Map;
+import java.util.List;
 import java.util.Random;
+import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicLong;
 
-import java.net.URL;
-import java.net.MalformedURLException;
-
+import javax.security.auth.Subject;
 import javax.servlet.DispatcherType;
 import javax.servlet.Filter;
 import javax.servlet.FilterChain;
@@ -41,26 +44,35 @@ import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
+import org.apache.solr.security.AuthCredentials;
 import org.apache.solr.servlet.SolrDispatchFilter;
+import org.apache.solr.servlet.security.RegExpAuthorizationFilter;
+import org.eclipse.jetty.security.ConstraintMapping;
+import org.eclipse.jetty.security.ConstraintSecurityHandler;
+import org.eclipse.jetty.security.IdentityService;
+import org.eclipse.jetty.security.LoginService;
+import org.eclipse.jetty.security.MappedLoginService;
+import org.eclipse.jetty.security.authentication.BasicAuthenticator;
 import org.eclipse.jetty.server.Connector;
-import org.eclipse.jetty.server.Handler;
 import org.eclipse.jetty.server.Server;
+import org.eclipse.jetty.server.UserIdentity;
 import org.eclipse.jetty.server.bio.SocketConnector;
-import org.eclipse.jetty.server.handler.ContextHandlerCollection;
-import org.eclipse.jetty.server.nio.SelectChannelConnector;
-import org.eclipse.jetty.server.ssl.SslConnector;
-import org.eclipse.jetty.server.ssl.SslSocketConnector;
-import org.eclipse.jetty.server.ssl.SslSelectChannelConnector;
 import org.eclipse.jetty.server.handler.GzipHandler;
+import org.eclipse.jetty.server.nio.SelectChannelConnector;
 import org.eclipse.jetty.server.session.HashSessionIdManager;
+import org.eclipse.jetty.server.ssl.SslConnector;
+import org.eclipse.jetty.server.ssl.SslSelectChannelConnector;
+import org.eclipse.jetty.server.ssl.SslSocketConnector;
 import org.eclipse.jetty.servlet.FilterHolder;
 import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.servlet.ServletHolder;
 import org.eclipse.jetty.util.component.LifeCycle;
 import org.eclipse.jetty.util.log.Logger;
-import org.eclipse.jetty.util.thread.QueuedThreadPool;
-import org.eclipse.jetty.util.thread.ThreadPool;
+import org.eclipse.jetty.util.security.Constraint;
+import org.eclipse.jetty.util.security.Credential;
+import org.eclipse.jetty.util.security.Password;
 import org.eclipse.jetty.util.ssl.SslContextFactory;
+import org.eclipse.jetty.util.thread.QueuedThreadPool;
 
 /**
  * Run solr using jetty
@@ -68,8 +80,25 @@ import org.eclipse.jetty.util.ssl.SslContextFactory;
  * @since solr 1.3
  */
 public class JettySolrRunner {
+  
+  public static final String SEARCH_USERNAME = "search-user";
+  public static final String SEARCH_PASSWORD = "search-pass";
+  public static final String SEARCH_ROLE = "search-role";
+  public static final AuthCredentials SEARCH_CREDENTIALS = AuthCredentials.createBasicAuthCredentials(SEARCH_USERNAME, SEARCH_PASSWORD);
+  
+  public static final String UPDATE_USERNAME = "update-user";
+  public static final String UPDATE_PASSWORD = "update-pass";
+  public static final String UPDATE_ROLE = "update-role";
+  public static final AuthCredentials UPDATE_CREDENTIALS = AuthCredentials.createBasicAuthCredentials(UPDATE_USERNAME, UPDATE_PASSWORD);
+  
+  public static final String ALL_USERNAME = "all-user";
+  public static final String ALL_PASSWORD = "all-pass";
+  public static final String ALL_ROLE = "all-role";
+  public static final AuthCredentials ALL_CREDENTIALS = AuthCredentials.createBasicAuthCredentials(ALL_USERNAME, ALL_PASSWORD);
+
   Server server;
 
+  FilterHolder regExpSecurityFilterHolder;
   FilterHolder dispatchFilter;
   FilterHolder debugFilter;
 
@@ -93,6 +122,8 @@ public class JettySolrRunner {
 
   private boolean stopAtShutdown;
 
+  private boolean runWithCommonSecurity;
+  
   private String coreNodeName;
 
   /** Maps servlet holders (i.e. factories: class + init params) to path specs */
@@ -146,20 +177,11 @@ public class JettySolrRunner {
 
 
   public JettySolrRunner(String solrHome, String context, int port) {
-    this.init(solrHome, context, port, true);
+    this(solrHome, context, port, null, null);
   }
 
   public JettySolrRunner(String solrHome, String context, int port, String solrConfigFilename, String schemaFileName) {
-    this.init(solrHome, context, port, true);
-    this.solrConfigFilename = solrConfigFilename;
-    this.schemaFilename = schemaFileName;
-  }
-  
-  public JettySolrRunner(String solrHome, String context, int port,
-      String solrConfigFilename, String schemaFileName, boolean stopAtShutdown) {
-    this.init(solrHome, context, port, stopAtShutdown);
-    this.solrConfigFilename = solrConfigFilename;
-    this.schemaFilename = schemaFileName;
+    this(solrHome, context, port, solrConfigFilename, schemaFileName, true, null, false);
   }
 
   /**
@@ -168,7 +190,8 @@ public class JettySolrRunner {
    */
   public JettySolrRunner(String solrHome, String context, int port,
       String solrConfigFilename, String schemaFileName, boolean stopAtShutdown,
-      SortedMap<ServletHolder,String> extraServlets) {
+      SortedMap<ServletHolder,String> extraServlets, boolean runWithCommonSecurity) {
+    this.runWithCommonSecurity = runWithCommonSecurity;
     if (null != extraServlets) { this.extraServlets.putAll(extraServlets); }
     this.init(solrHome, context, port, stopAtShutdown);
     this.solrConfigFilename = solrConfigFilename;
@@ -276,8 +299,132 @@ public class JettySolrRunner {
 
     }
 
-    // Initialize the servlets
-    final ServletContextHandler root = new ServletContextHandler(server,context,ServletContextHandler.SESSIONS);
+    final ServletContextHandler root;
+    if (getRunWithCommonSecurity()) {
+      ConstraintSecurityHandler security = new ConstraintSecurityHandler();
+      server.setHandler(security);
+      
+      // Setting up web-container handled authentication (and authorization)
+      final List<ConstraintMapping> constraintMappings = new ArrayList<ConstraintMapping>();
+      // Configuring web-container authorization. We want to have the following set of constraints
+      // -----------------------------------------------------
+      // | Authorization             | Roles                 |
+      // -----------------------------------------------------
+      // | Search any collection     | all-role, search-role |
+      // | Index into any collection | all-role, update-role |
+      // | Anything else             | all-role              |
+      // -----------------------------------------------------
+      // We could have configured the web-container to handle all authorization, but that would take a huge amount of constraints to be set up
+      // due to limitations on patterns in "url-pattern" in "security-constraint|web-resource-collection"'s in web.xml. You cannot write stuff like
+      //   <url-pattern>/solr/*/search</url-pattern>, <url-pattern>*/search</url-pattern> or <url-pattern>*search</url-pattern>
+      // Therefore you would need to repeat the following lines for each and every collection the tests create (and that can currently be 40+)
+      //   constraintMappings.add(createConstraint("update-<ollection-name>",  "/solr/<collection-name>/update", new String[]{"all-role", "update-role"} ));
+      //   constraintMappings.add(createConstraint("search-<ollection-name>",  "/solr/<collection-name>/select", new String[]{"all-role", "search-role"} ));
+      //   constraintMappings.add(createConstraint("term-<ollection-name>",  "/solr/<collection-name>/term", new String[]{"all-role", "search-role"} ));
+      //   constraintMappings.add(createConstraint("get-<ollection-name>",  "/solr/<collection-name>/get", new String[]{"all-role", "search-role"} ));
+      // Basic reason this needs to be done to have the fairly simple authorization constrains described above is that URLs are constructed 
+      // /solr/<collection-or-replica>/<operation> instead of /solr/<operation>/<collection-or-replica>, making it hard to authorize on "operation but across all collection",
+      // but easy to authorize on "collection but all operations"
+      // Therefore we basically only configure the web-container to control that all URLs require authentication but authorize to any role, and then program our
+      // way out of the authorization stuff by using RegExpAuthorizationFilter filter - see setup below
+      //
+      // Now setting up what corresponds to the following in web.xml 
+      // <security-constraint>
+      //   <web-resource-collection>
+      //     <web-resource-name>All resources need authentication</web-resource-name>
+      //     <url-pattern>/*</url-pattern>
+      //   </web-resource-collection>
+      //   <auth-constraint>
+      //     <role-name>*</role-name>
+      //   </auth-constraint>
+      // </security-constraint>
+      constraintMappings.add(createConstraint("All resources need authentication",  "/*", new String[]{"*"} ));
+  
+      Set<String> knownRoles = new HashSet<String>();
+      for (ConstraintMapping constraintMapping : constraintMappings) {
+        for (String role : constraintMapping.getConstraint().getRoles()) {
+          knownRoles.add(role);
+        }
+      }
+  
+      // Setting up authentication realm
+      // -------------------------------------------
+      // | Username    | Password    | Roles       |
+      // -------------------------------------------
+      // | search-user | search-pass | search-role |
+      // | update-user | update-pass | update-role |
+      // | all-user    | all-pass    | all-role    |
+      // -------------------------------------------
+      // Now setting up what corresponds to the following in jetty.xml (v8)
+      //<Call name="addBean">
+      //  <Arg>
+      //    <New class="Anonymous class extending MappedLoginService">
+      //      <Set name="name">MyRealm</Set>
+      //    </New>
+      //  </Arg>
+      //</Call>
+      LoginService loginService = new MappedLoginService() {
+        @Override
+        protected synchronized UserIdentity putUser(String userName, Object info)
+        {
+          final UserIdentity identity;
+          if (info instanceof UserIdentity)
+            identity=(UserIdentity)info;
+          else
+          {
+            Credential credential = (info instanceof Credential)?(Credential)info:Credential.getCredential(info.toString());
+            
+            Principal userPrincipal = new KnownUser(userName,credential);
+            Subject subject = new Subject();
+            
+            identity=_identityService.newUserIdentity(subject,userPrincipal,IdentityService.NO_ROLES);
+          }
+          
+          _users.put(userName,identity);
+          return identity;
+        }
+        
+        @Override
+        public synchronized UserIdentity putUser(String userName, Credential credential, String[] roles)
+        {
+          Principal userPrincipal = new KnownUser(userName,credential);
+          Subject subject = new Subject();
+          
+          UserIdentity identity=_identityService.newUserIdentity(subject,userPrincipal,roles);
+          _users.put(userName,identity);
+          return identity;
+        } 
+
+        @Override
+        protected UserIdentity loadUser(String arg0) {
+          return null;
+        }
+  
+        @Override
+        protected void loadUsers() throws IOException {
+          // For test purpose just a hard coded set of user/password/roles
+          putUser(SEARCH_USERNAME, new Password(SEARCH_PASSWORD), new String[]{SEARCH_ROLE});
+          putUser(UPDATE_USERNAME, new Password(UPDATE_PASSWORD), new String[]{UPDATE_ROLE});
+          putUser(ALL_USERNAME, new Password(ALL_PASSWORD), new String[]{ALL_ROLE});
+        }
+      };
+      server.addBean(loginService); 
+      
+      // Now setting up what corresponds to the following in web.xml
+      // <login-config>
+      //   <auth-method>BASIC</auth-method>
+      //   <realm-name>MyRealm</realm-name>
+      // </login-config>
+      security.setConstraintMappings(constraintMappings, knownRoles);
+      security.setAuthenticator(new BasicAuthenticator());
+      security.setLoginService(loginService);
+      security.setStrict(false);
+      root = new ServletContextHandler(security,context,ServletContextHandler.SESSIONS);
+    } else {
+      root = new ServletContextHandler(server,context,ServletContextHandler.SESSIONS);
+    }
+
+    // Initialize the filters/servlets
     root.setHandler(new GzipHandler());
     server.addLifeCycleListener(new LifeCycle.Listener() {
 
@@ -305,8 +452,58 @@ public class JettySolrRunner {
             solrConfigFilename);
         if (schemaFilename != null) System.setProperty("schema", 
             schemaFilename);
-//        SolrDispatchFilter filter = new SolrDispatchFilter();
-//        FilterHolder fh = new FilterHolder(filter);
+
+        if (getRunWithCommonSecurity()) {
+          // Setting up filter handled authorization
+          // Now setting up what corresponds to the following in web.xml (it is important that this one is the FIRST filter) 
+          //        <filter>
+          //          <filter-name>RegExpAuthorizationFilter</filter-name>
+          //          <filter-class>org.apache.solr.servlet.RegExpAuthorizationFilter</filter-class>
+          //          <init-param>
+          //            <param-name>update-constraint</param-name>
+          //            <param-value>1|update-role,all-role|^.*/update$</param-value>
+          //          </init-param>
+          //          <init-param>
+          //            <param-name>search-constraint</param-name>
+          //            <param-value>2|search-role,all-role|^.*/select$</param-value>
+          //          </init-param>
+          //          <init-param>
+          //            <param-name>terms-constraint</param-name>
+          //            <param-value>3|search-role,all-role|^.*/terms$</param-value>
+          //          </init-param>
+          //          <init-param>
+          //            <param-name>get-constraint</param-name>
+          //            <param-value>4|search-role,all-role|^.*/get$</param-value>
+          //          </init-param>
+          //          <init-param>
+          //            <param-name>all-constraint</param-name>
+          //            <param-value>5|all-role|^.*$</param-value>
+          //          </init-param>
+          //        </filter>
+          //      
+          //        <filter-mapping>
+          //          <filter-name>RegExpAuthorizationFilter</filter-name>
+          //          <url-pattern>/*</url-pattern>
+          //        </filter-mapping>
+          regExpSecurityFilterHolder = new FilterHolder(new RegExpAuthorizationFilter()); 
+          regExpSecurityFilterHolder.setInitParameter("update-constraint", "1|" + UPDATE_ROLE + "," + ALL_ROLE + "|^.*/update$");
+          regExpSecurityFilterHolder.setInitParameter("search-constraint", "2|" + SEARCH_ROLE + "," + ALL_ROLE + "|^.*/select$");
+          regExpSecurityFilterHolder.setInitParameter("terms-constraint", "3|" + SEARCH_ROLE + "," + ALL_ROLE + "|^.*/terms$");
+          regExpSecurityFilterHolder.setInitParameter("get-constraint", "4|" + SEARCH_ROLE + "," + ALL_ROLE + "|^.*/get$");
+          regExpSecurityFilterHolder.setInitParameter("all-constraint", "5|" + ALL_ROLE + "|^.*$");
+          root.addFilter(regExpSecurityFilterHolder, "*", EnumSet.of(DispatcherType.REQUEST));
+        }
+        
+        // Now setting up what corresponds to the following in web.xml 
+        //        <filter>
+        //          <filter-name>SolrRequestFilter</filter-name>
+        //          <filter-class>org.apache.solr.servlet.SolrDispatchFilter</filter-class>
+        //        </filter>
+        //          
+        //        <filter-mapping>
+        //          <filter-name>SolrRequestFilter</filter-name>
+        //          <url-pattern>/*</url-pattern>
+        //        </filter-mapping>
         debugFilter = root.addFilter(DebugFilter.class, "*", EnumSet.of(DispatcherType.REQUEST) );
         dispatchFilter = root.addFilter(SolrDispatchFilter.class, "*", EnumSet.of(DispatcherType.REQUEST) );
         for (ServletHolder servletHolder : extraServlets.keySet()) {
@@ -327,6 +524,17 @@ public class JettySolrRunner {
     // for some reason, there must be a servlet for this to get applied
     root.addServlet(Servlet404.class, "/*");
 
+  }
+
+  private ConstraintMapping createConstraint(String name, String path, String[] roles) {
+    Constraint constraint = new Constraint();
+    constraint.setName(name);
+    constraint.setAuthenticate(true);
+    constraint.setRoles(roles);
+    ConstraintMapping mapping = new ConstraintMapping();
+    mapping.setPathSpec(path);
+    mapping.setConstraint(constraint);
+    return mapping;
   }
 
   public FilterHolder getDispatchFilter() {
@@ -391,13 +599,14 @@ public class JettySolrRunner {
   }
 
   public void stop() throws Exception {
-
+    Filter regExpSecurityFilter = (regExpSecurityFilterHolder != null)?regExpSecurityFilterHolder.getFilter():null;
     Filter filter = dispatchFilter.getFilter();
 
     server.stop();
 
     //server.destroy();
     if (server.getState().equals(Server.FAILED)) {
+      if (regExpSecurityFilter != null) regExpSecurityFilter.destroy();
       filter.destroy();
     }
     
@@ -492,6 +701,10 @@ public class JettySolrRunner {
     this.dataDir = dataDir;
   }
   
+  public boolean getRunWithCommonSecurity() {
+    return runWithCommonSecurity;
+  }
+
   public void setUlogDir(String ulogDir) {
     this.solrUlogDir = ulogDir;
   }

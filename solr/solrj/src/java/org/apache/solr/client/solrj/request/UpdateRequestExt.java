@@ -28,6 +28,7 @@ import java.util.Map;
 
 import org.apache.solr.client.solrj.util.ClientUtils;
 import org.apache.solr.common.SolrInputDocument;
+import org.apache.solr.common.params.UpdateParams;
 import org.apache.solr.common.util.ContentStream;
 import org.apache.solr.common.util.XML;
 
@@ -38,15 +39,18 @@ public class UpdateRequestExt extends AbstractUpdateRequest {
   private Map<String,Long> deleteById = null;
   private List<String> deleteQuery = null;
   
-  private class SolrDoc {
+  public class SolrDoc {
     @Override
     public String toString() {
       return "SolrDoc [document=" + document + ", commitWithin=" + commitWithin
-          + ", overwrite=" + overwrite + "]";
+          + ", overwrite=" + classicOverwrite + "]";
     }
     SolrInputDocument document;
     int commitWithin;
-    boolean overwrite;
+    boolean classicOverwrite;
+    public SolrInputDocument getDocument() {
+      return document;
+    }
   }
   
   public UpdateRequestExt() {
@@ -85,7 +89,7 @@ public class UpdateRequestExt extends AbstractUpdateRequest {
     SolrDoc solrDoc = new SolrDoc();
     solrDoc.document = doc;
     solrDoc.commitWithin = -1;
-    solrDoc.overwrite = true;
+    solrDoc.classicOverwrite = true;
     documents.add(solrDoc);
     
     return this;
@@ -99,7 +103,7 @@ public class UpdateRequestExt extends AbstractUpdateRequest {
     SolrDoc solrDoc = new SolrDoc();
     solrDoc.document = doc;
     solrDoc.commitWithin = commitWithin;
-    solrDoc.overwrite = overwrite;
+    solrDoc.classicOverwrite = overwrite;
     documents.add(solrDoc);
     
     return this;
@@ -159,14 +163,14 @@ public class UpdateRequestExt extends AbstractUpdateRequest {
   }
   
   public void writeXML(Writer writer) throws IOException {
-    List<List<SolrDoc>> getDocLists = getDocLists(documents);
+    List<List<SolrDoc>> getDocLists = getDocLists();
     
     for (List<SolrDoc> docs : getDocLists) {
       
       if ((docs != null && docs.size() > 0)) {
         SolrDoc firstDoc = docs.get(0);
         int commitWithin = firstDoc.commitWithin != -1 ? firstDoc.commitWithin : this.commitWithin;
-        boolean overwrite = firstDoc.overwrite;
+        boolean overwrite = firstDoc.classicOverwrite;
         if (commitWithin > -1 || overwrite != true) {
           writer.write("<add commitWithin=\"" + commitWithin + "\" " + "overwrite=\"" + overwrite + "\">");
         } else {
@@ -213,7 +217,7 @@ public class UpdateRequestExt extends AbstractUpdateRequest {
     }
   }
   
-  private List<List<SolrDoc>> getDocLists(List<SolrDoc> documents) {
+  public List<List<SolrDoc>> getDocLists() {
     List<List<SolrDoc>> docLists = new ArrayList<List<SolrDoc>>();
     if (this.documents == null) {
       return docLists;
@@ -222,14 +226,14 @@ public class UpdateRequestExt extends AbstractUpdateRequest {
     int lastCommitWithin = -1;
     List<SolrDoc> docList = null;
     for (SolrDoc doc : this.documents) {
-      if (doc.overwrite != lastOverwrite
+      if (doc.classicOverwrite != lastOverwrite
           || doc.commitWithin != lastCommitWithin || docLists.size() == 0) {
         docList = new ArrayList<SolrDoc>();
         docLists.add(docList);
       }
       docList.add(doc);
       lastCommitWithin = doc.commitWithin;
-      lastOverwrite = doc.overwrite;
+      lastOverwrite = doc.classicOverwrite;
     }
 
     return docLists;

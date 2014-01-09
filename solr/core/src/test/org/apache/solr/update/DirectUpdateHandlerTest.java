@@ -24,6 +24,7 @@ import java.util.Map;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.store.Directory;
 import org.apache.solr.SolrTestCaseJ4;
+import org.apache.solr.common.SolrInputDocument;
 import org.apache.solr.common.params.CommonParams;
 import org.apache.solr.common.params.MapSolrParams;
 import org.apache.solr.core.SolrCore;
@@ -88,7 +89,7 @@ public class DirectUpdateHandlerTest extends SolrTestCaseJ4 {
     assertNull("This test requires a schema that has no version field, " +
                "it appears the schema file in use has been edited to violate " +
                "this requirement",
-               h.getCore().getLatestSchema().getFieldOrNull(VersionInfo.VERSION_FIELD));
+               h.getCore().getLatestSchema().getFieldOrNull(SolrInputDocument.VERSION_FIELD));
 
     assertU(adoc("id","5"));
     assertU(adoc("id","6"));

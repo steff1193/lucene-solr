@@ -2314,6 +2314,7 @@ public final class SolrCore implements SolrInfoMBean {
           shard = "_auto_";
         }
         lst.add("shard", shard);
+        lst.add("indexDir", getIndexDir());
       }
     }
     

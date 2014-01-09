@@ -27,13 +27,13 @@ import org.apache.lucene.queries.function.ValueSource;
 import org.apache.lucene.util.BitUtil;
 import org.apache.lucene.util.BytesRef;
 import org.apache.solr.common.SolrException;
+import org.apache.solr.common.SolrInputDocument;
 import org.apache.solr.schema.IndexSchema;
 import org.apache.solr.schema.SchemaField;
 import org.apache.solr.search.SolrIndexSearcher;
 import org.apache.solr.util.RefCounted;
 
 public class VersionInfo {
-  public static final String VERSION_FIELD="_version_";
 
   private final UpdateLog ulog;
   private final VersionBucket[] buckets;
@@ -42,40 +42,39 @@ public class VersionInfo {
   final ReadWriteLock lock = new ReentrantReadWriteLock(true);
 
   /**
-   * Gets and returns the {@link #VERSION_FIELD} from the specified 
+   * Gets and returns the {@link SolrInputDocument#VERSION_FIELD} from the specified 
    * schema, after verifying that it is indexed, stored, and single-valued.  
    * If any of these pre-conditions are not met, it throws a SolrException 
    * with a user suitable message indicating the problem.
    */
   public static SchemaField getAndCheckVersionField(IndexSchema schema) 
     throws SolrException {
-    final String errPrefix = VERSION_FIELD + "field must exist in schema, using indexed=\"true\" stored=\"true\" and multiValued=\"false\"";
-    SchemaField sf = schema.getFieldOrNull(VERSION_FIELD);
+    final String errPrefix = SolrInputDocument.VERSION_FIELD + "field must exist in schema, using indexed=\"true\" stored=\"true\" and multiValued=\"false\"";
+    SchemaField sf = schema.getFieldOrNull(SolrInputDocument.VERSION_FIELD);
 
     if (null == sf) {
       throw new SolrException
         (SolrException.ErrorCode.SERVER_ERROR, 
-         errPrefix + " (" + VERSION_FIELD + " does not exist)");
+         errPrefix + " (" + SolrInputDocument.VERSION_FIELD + " does not exist)");
     }
     if ( !sf.indexed() ) {
       throw new SolrException
         (SolrException.ErrorCode.SERVER_ERROR, 
-         errPrefix + " (" + VERSION_FIELD + " is not indexed");
+         errPrefix + " (" + SolrInputDocument.VERSION_FIELD + " is not indexed");
     }
     if ( !sf.stored() ) {
       throw new SolrException
         (SolrException.ErrorCode.SERVER_ERROR, 
-         errPrefix + " (" + VERSION_FIELD + " is not stored");
+         errPrefix + " (" + SolrInputDocument.VERSION_FIELD + " is not stored");
     }
     if ( sf.multiValued() ) {
       throw new SolrException
         (SolrException.ErrorCode.SERVER_ERROR, 
-         errPrefix + " (" + VERSION_FIELD + " is multiValued");
+         errPrefix + " (" + SolrInputDocument.VERSION_FIELD + " is multiValued");
     }
     
     return sf;
   }
-
   public VersionInfo(UpdateLog ulog, int nBuckets) {
     this.ulog = ulog;
     IndexSchema schema = ulog.uhandler.core.getLatestSchema(); 

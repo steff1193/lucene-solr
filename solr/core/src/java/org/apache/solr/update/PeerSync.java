@@ -29,6 +29,7 @@ import java.util.Set;
 
 import org.apache.http.NoHttpResponseException;
 import org.apache.http.client.HttpClient;
+import org.apache.http.conn.ClientConnectionManager;
 import org.apache.http.conn.ConnectTimeoutException;
 import org.apache.lucene.util.BytesRef;
 import org.apache.solr.client.solrj.SolrServerException;
@@ -48,6 +49,7 @@ import org.apache.solr.handler.component.ShardResponse;
 import org.apache.solr.request.LocalSolrQueryRequest;
 import org.apache.solr.request.SolrQueryRequest;
 import org.apache.solr.response.SolrQueryResponse;
+import org.apache.solr.security.InterSolrNodeAuthCredentialsFactory.AuthCredentialsSource;
 import org.apache.solr.update.processor.DistributedUpdateProcessorFactory;
 import org.apache.solr.update.processor.RunUpdateProcessorFactory;
 import org.apache.solr.update.processor.UpdateRequestProcessor;
@@ -69,8 +71,8 @@ public class PeerSync  {
 
   private UpdateHandler uhandler;
   private UpdateLog ulog;
-  private HttpShardHandlerFactory shardHandlerFactory;
-  private ShardHandler shardHandler;
+  private final HttpShardHandlerFactory shardHandlerFactory;
+  private final ShardHandler shardHandler;
 
   private UpdateLog.RecentUpdates recentUpdates;
   private List<Long> startingVersions;
@@ -82,16 +84,6 @@ public class PeerSync  {
   private long ourHighThreshold; // 80th percentile
   private boolean cantReachIsSuccess;
   private boolean getNoVersionsIsSuccess;
-  private static final HttpClient client;
-  static {
-    ModifiableSolrParams params = new ModifiableSolrParams();
-    params.set(HttpClientUtil.PROP_MAX_CONNECTIONS_PER_HOST, 20);
-    params.set(HttpClientUtil.PROP_MAX_CONNECTIONS, 10000);
-    params.set(HttpClientUtil.PROP_CONNECTION_TIMEOUT, 30000);
-    params.set(HttpClientUtil.PROP_SO_TIMEOUT, 30000);
-    params.set(HttpClientUtil.PROP_USE_RETRY, false);
-    client = HttpClientUtil.createClient(params);
-  }
 
   // comparator that sorts by absolute value, putting highest first
   private static Comparator<Long> absComparator = new Comparator<Long>() {
@@ -145,9 +137,10 @@ public class PeerSync  {
     
     uhandler = core.getUpdateHandler();
     ulog = uhandler.getUpdateLog();
-    // TODO: shutdown
+    
     shardHandlerFactory = new HttpShardHandlerFactory();
-    shardHandler = shardHandlerFactory.getShardHandler(client);
+    ModifiableSolrParams params = new ModifiableSolrParams();
+    shardHandler = shardHandlerFactory.getShardHandler(AuthCredentialsSource.useInternalAuthCredentials());
   }
 
   /** optional list of updates we had before possibly receiving new updates */
@@ -446,6 +439,7 @@ public class PeerSync  {
     params.set(DISTRIB_UPDATE_PARAM, FROMLEADER.toString());
     params.set("peersync",true); // debugging
     SolrQueryRequest req = new LocalSolrQueryRequest(uhandler.core, params);
+    ((LocalSolrQueryRequest)req).setAuthCredentials(AuthCredentialsSource.useInternalAuthCredentials().getAuthCredentials());
     SolrQueryResponse rsp = new SolrQueryResponse();
 
     UpdateRequestProcessorChain processorChain = req.getCore().getUpdateProcessingChain(null);
@@ -480,6 +474,8 @@ public class PeerSync  {
             // cmd.setIndexedId(new BytesRef(idBytes));
             cmd.solrDoc = sdoc;
             cmd.setVersion(version);
+            cmd.setRequestVersion(version);
+            cmd.setLeaderLogic(false);
             cmd.setFlags(UpdateCommand.PEER_SYNC | UpdateCommand.IGNORE_AUTOCOMMIT);
             if (debug) {
               log.debug(msg() + "add " + cmd);
@@ -493,6 +489,8 @@ public class PeerSync  {
             DeleteUpdateCommand cmd = new DeleteUpdateCommand(req);
             cmd.setIndexedId(new BytesRef(idBytes));
             cmd.setVersion(version);
+            cmd.setRequestVersion(version);
+            cmd.setLeaderLogic(false);
             cmd.setFlags(UpdateCommand.PEER_SYNC | UpdateCommand.IGNORE_AUTOCOMMIT);
             if (debug) {
               log.debug(msg() + "delete " + cmd);
@@ -507,6 +505,8 @@ public class PeerSync  {
             DeleteUpdateCommand cmd = new DeleteUpdateCommand(req);
             cmd.query = query;
             cmd.setVersion(version);
+            cmd.setRequestVersion(version);
+            cmd.setLeaderLogic(false);
             cmd.setFlags(UpdateCommand.PEER_SYNC | UpdateCommand.IGNORE_AUTOCOMMIT);
             if (debug) {
               log.debug(msg() + "deleteByQuery " + cmd);
@@ -547,7 +547,13 @@ public class PeerSync  {
     return true;
   }
 
-
+  public void close() {
+    try {
+      shardHandlerFactory.close();
+    } catch (Exception e) {
+      SolrException.log(log, e);
+    }
+  }
 
   /** Requests and applies recent updates from peers */
   public static void sync(SolrCore core, List<String> replicas, int nUpdates) {

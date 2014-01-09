@@ -17,11 +17,14 @@ package org.apache.solr.cloud;
  * limitations under the License.
  */
 
+import static org.apache.solr.client.solrj.embedded.JettySolrRunner.SEARCH_CREDENTIALS;
+
 import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.lucene.util.LuceneTestCase.Slow;
 import org.apache.solr.client.solrj.SolrQuery;
+import org.apache.solr.client.solrj.SolrRequest.METHOD;
 import org.apache.solr.common.SolrInputDocument;
 import org.apache.solr.core.Diagnostics;
 import org.apache.solr.core.SolrCore;
@@ -136,7 +139,9 @@ public class  ChaosMonkeySafeLeaderTest extends AbstractFullDistribZkTestBase {
 
     checkShardConsistency(true, true);
     
-    if (VERBOSE) System.out.println("control docs:" + controlClient.query(new SolrQuery("*:*")).getResults().getNumFound() + "\n\n");
+    if (VERBOSE) {
+      System.out.println("control docs:" + controlClient.query(new SolrQuery("*:*"), METHOD.GET, SEARCH_CREDENTIALS).getResults().getNumFound() + "\n\n");
+    }
   }
 
   private void randomlyEnableAutoSoftCommit() {

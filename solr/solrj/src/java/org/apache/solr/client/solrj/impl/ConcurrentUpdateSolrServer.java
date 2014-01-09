@@ -37,6 +37,7 @@ import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.ContentProducer;
 import org.apache.http.entity.EntityTemplate;
+import org.apache.http.protocol.HttpContext;
 import org.apache.solr.client.solrj.ResponseParser;
 import org.apache.solr.client.solrj.SolrRequest;
 import org.apache.solr.client.solrj.SolrServer;
@@ -44,6 +45,8 @@ import org.apache.solr.client.solrj.SolrServerException;
 import org.apache.solr.client.solrj.request.RequestWriter;
 import org.apache.solr.client.solrj.request.UpdateRequest;
 import org.apache.solr.client.solrj.util.ClientUtils;
+import org.apache.solr.common.SolrException;
+import org.apache.solr.common.exceptions.PartialErrors;
 import org.apache.solr.common.params.CommonParams;
 import org.apache.solr.common.params.ModifiableSolrParams;
 import org.apache.solr.common.params.SolrParams;
@@ -193,19 +196,23 @@ public class ConcurrentUpdateSolrServer extends SolrServer {
             method.addHeader("User-Agent", HttpSolrServer.AGENT);
             method.addHeader("Content-Type", contentType);
             
+            // With the kind of entity (template) we use here, authentication will not work without being preemptive (the entity cannot
+            // be re-sent so to speak). In plain HttpSolrServer, where preemptive authentication is not forced, re-send capabilities are
+            // achieved by wrapping a BufferedHttpEntity round the entity, but it cannot be done here.
+            updateRequest.setPreemptiveAuthentication(true);
+            HttpContext context = server.getHttpContextForRequest(updateRequest);
             
-            response = server.getHttpClient().execute(method);
+            response = (context != null)?server.getHttpClient().execute(method, context):server.getHttpClient().execute(method);
             int statusCode = response.getStatusLine().getStatusCode();
             log.info("Status for: "
                 + updateRequest.getDocuments().get(0).getFieldValue("id")
                 + " is " + statusCode);
             if (statusCode != HttpStatus.SC_OK) {
-              StringBuilder msg = new StringBuilder();
-              msg.append(response.getStatusLine().getReasonPhrase());
-              msg.append("\n\n");
-              msg.append("\n\n");
-              msg.append("request: ").append(method.getURI());
-              handleError(new Exception(msg.toString()));
+              StringBuilder additionalMsg = new StringBuilder();
+              additionalMsg.append( "\n\n" );
+              additionalMsg.append( "request: "+method.getURI() );
+              SolrException ex = SolrException.decodeFromHttpMethod(response, "UTF-8", additionalMsg.toString(), null);
+              handleError(ex);
             }
           } finally {
             try {

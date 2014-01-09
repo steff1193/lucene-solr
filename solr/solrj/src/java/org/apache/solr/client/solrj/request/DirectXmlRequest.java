@@ -17,11 +17,8 @@
 
 package org.apache.solr.client.solrj.request;
 
-import java.io.IOException;
 import java.util.Collection;
 
-import org.apache.solr.client.solrj.SolrServer;
-import org.apache.solr.client.solrj.SolrServerException;
 import org.apache.solr.client.solrj.SolrRequest;
 import org.apache.solr.client.solrj.response.UpdateResponse;
 import org.apache.solr.client.solrj.util.ClientUtils;
@@ -34,7 +31,7 @@ import org.apache.solr.common.util.ContentStream;
  *
  * @since solr 1.3
  */
-public class DirectXmlRequest extends SolrRequest implements IsUpdateRequest
+public class DirectXmlRequest extends SolrRequest<UpdateResponse> implements IsUpdateRequest
 {
   final String xml;
   private SolrParams params;
@@ -60,13 +57,4 @@ public class DirectXmlRequest extends SolrRequest implements IsUpdateRequest
     this.params = params;
   }
 
-  @Override
-  public UpdateResponse process( SolrServer server ) throws SolrServerException, IOException
-  {
-    long startTime = System.currentTimeMillis();
-    UpdateResponse res = new UpdateResponse();
-    res.setResponse( server.request( this ) );
-    res.setElapsedTime( System.currentTimeMillis()-startTime );
-    return res;
-  }
 }

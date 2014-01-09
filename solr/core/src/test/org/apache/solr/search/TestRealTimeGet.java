@@ -17,14 +17,8 @@
 package org.apache.solr.search;
 
 
-import org.apache.lucene.util.LuceneTestCase.Slow;
-import org.noggit.ObjectBuilder;
-import org.apache.solr.common.SolrException;
-import org.apache.solr.common.SolrInputDocument;
-import org.apache.solr.request.SolrQueryRequest;
-import org.apache.solr.util.TestHarness;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import static org.apache.solr.core.SolrCore.verbose;
+import static org.apache.solr.update.processor.DistributingUpdateProcessorFactory.DISTRIB_UPDATE_PARAM;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -34,8 +28,17 @@ import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
-import static org.apache.solr.core.SolrCore.verbose;
-import static org.apache.solr.update.processor.DistributingUpdateProcessorFactory.DISTRIB_UPDATE_PARAM;
+import org.noggit.ObjectBuilder;
+import org.apache.solr.common.SolrException;
+import org.apache.solr.common.SolrInputDocument;
+import org.apache.solr.common.exceptions.update.DocumentAlreadyExists;
+import org.apache.solr.common.exceptions.update.DocumentDoesNotExist;
+import org.apache.solr.common.exceptions.update.VersionConflict;
+import org.apache.solr.request.SolrQueryRequest;
+import org.apache.solr.update.processor.DistributedUpdateProcessor.DistribPhase;
+import org.apache.solr.util.TestHarness;
+import org.junit.BeforeClass;
+import org.junit.Test;
 
 public class TestRealTimeGet extends TestRTGBase {
 
@@ -43,7 +46,6 @@ public class TestRealTimeGet extends TestRTGBase {
   public static void beforeClass() throws Exception {
     initCore("solrconfig-tlog.xml","schema15.xml");
   }
-
 
   @Test
   public void testGetRealtime() throws Exception {
@@ -239,35 +241,49 @@ public class TestRealTimeGet extends TestRTGBase {
     long version = addAndGetVersion(sdoc("id","1") , null);
     long version2;
 
+    SolrInputDocument doc = null;
     try {
-      // try version added directly on doc
-      version2 = addAndGetVersion(sdoc("id","1", "_version_", Long.toString(version-1)), null);
+      // try an update with wrong positive version added directly on doc, saying that it has to exist with this wrong version
+      doc = sdoc("id","1", "_version_", Long.toString(version-1));
+      version2 = addAndGetVersion(doc, null);
       fail();
     } catch (SolrException se) {
+      assertTrue(se instanceof VersionConflict);
+      // Hmmm, why partRef included when that update-request is a on-doc-only-request
+      assertVersionConflict((VersionConflict)se, version, doc.getUniquePartRef(), false);
+      assertEquals(409, se.code());
+    }
+
+    doc = sdoc("id","1");
+    try {
+      // try an update with wrong positive version added as a parameter on the request, saying that it has to exist with this wrong version
+      version2 = addAndGetVersion(doc, params("_version_", Long.toString(version-1)));
+      fail();
+    } catch (SolrException se) {
+      assertTrue(se instanceof VersionConflict);
+      // Hmmm, why partRef included when that update-request is a on-doc-only-request
+      assertVersionConflict((VersionConflict)se, version, doc.getUniquePartRef(), false);
       assertEquals(409, se.code());
     }
 
     try {
-      // try version added as a parameter on the request
-      version2 = addAndGetVersion(sdoc("id","1"), params("_version_", Long.toString(version-1)));
-      fail();
-    } catch (SolrException se) {
-      assertEquals(409, se.code());
-    }
-
-    try {
-      // try an add specifying a negative version
+      // try an update (add) with a negative version, saying that it has to not exist
       version2 = addAndGetVersion(sdoc("id","1"), params("_version_", Long.toString(-version)));
       fail();
     } catch (SolrException se) {
+      assertTrue(se instanceof DocumentAlreadyExists);
       assertEquals(409, se.code());
     }
 
+    doc = sdoc("id","1");
     try {
-      // try an add with a greater version
-      version2 = addAndGetVersion(sdoc("id","1"), params("_version_", Long.toString(version+random().nextInt(1000)+1)));
+      // try an update with wrong positive version (greater than current version), saying that it has to exist with this wrong version
+      version2 = addAndGetVersion(doc, params("_version_", Long.toString(version+random().nextInt(1000)+1)));
       fail();
     } catch (SolrException se) {
+      assertTrue(se instanceof VersionConflict);
+      // Hmmm, why partRef included when that update-request is a on-doc-only-request
+      assertVersionConflict((VersionConflict)se, version, doc.getUniquePartRef(), false);
       assertEquals(409, se.code());
     }
 
@@ -276,50 +292,64 @@ public class TestRealTimeGet extends TestRTGBase {
     //
 
     try {
-      // try a delete with version on the request
+      // try a delete with wrong positive version (less than current version), saying that it has to exist with this wrong version
       version2 = deleteAndGetVersion("1", params("_version_", Long.toString(version-1)));
       fail();
     } catch (SolrException se) {
+      assertTrue(se instanceof VersionConflict);
+      assertVersionConflict((VersionConflict)se, version, null, false);
       assertEquals(409, se.code());
     }
 
     try {
-      // try a delete with a negative version
+      // try a delete with a negative version, saying that it has to not exist
       version2 = deleteAndGetVersion("1", params("_version_", Long.toString(-version)));
       fail();
     } catch (SolrException se) {
+      assertTrue(se instanceof DocumentAlreadyExists);
       assertEquals(409, se.code());
     }
 
     try {
-      // try a delete with a greater version
+      // try a delete with a wrong positive version (greater than current version), saying that it has to exist with this wrong version
       version2 = deleteAndGetVersion("1", params("_version_", Long.toString(version+random().nextInt(1000)+1)));
       fail();
     } catch (SolrException se) {
+      assertTrue(se instanceof VersionConflict);
+      assertVersionConflict((VersionConflict)se, version, null, false);
       assertEquals(409, se.code());
     }
 
     try {
-      // try a delete of a document that doesn't exist, specifying a specific version
+      // try a delete of a document that doesn't exist with (wrong) positive version, saying that it has to exist (with this wrong version)
       version2 = deleteAndGetVersion("I_do_not_exist", params("_version_", Long.toString(version)));
       fail();
     } catch (SolrException se) {
+      assertTrue(se instanceof DocumentDoesNotExist);
       assertEquals(409, se.code());
     }
 
-    // try a delete of a document that doesn't exist, specifying that it should not
+    // try a delete of a document that doesn't exist with a negative version, saying that it has to not exist
     version2 = deleteAndGetVersion("I_do_not_exist", params("_version_", Long.toString(-1)));
+    assertTrue(version2 < 0);
+
+    // try a delete of a document that doesn't exist with 0 as version, saying that you dont care if it exists
+    version2 = deleteAndGetVersion("I_do_not_exist", params("_version_", Long.toString(0)));
     assertTrue(version2 < 0);
 
     // overwrite the document
     version2 = addAndGetVersion(sdoc("id","1", "_version_", Long.toString(version)), null);
     assertTrue(version2 > version);
 
+    doc = sdoc("id","1");
     try {
       // overwriting the previous version should now fail
-      version2 = addAndGetVersion(sdoc("id","1"), params("_version_", Long.toString(version)));
+      version2 = addAndGetVersion(doc, params("_version_", Long.toString(version)));
       fail();
     } catch (SolrException se) {
+      assertTrue(se instanceof VersionConflict);
+      // Hmmm, why partRef included when that update-request is a on-doc-only-request
+      assertVersionConflict((VersionConflict)se, version2, doc.getUniquePartRef(), false);
       assertEquals(409, se.code());
     }
 
@@ -328,6 +358,8 @@ public class TestRealTimeGet extends TestRTGBase {
       version2 = deleteAndGetVersion("1", params("_version_", Long.toString(version)));
       fail();
     } catch (SolrException se) {
+      assertTrue(se instanceof VersionConflict);
+      assertVersionConflict((VersionConflict)se, version2, null, false);
       assertEquals(409, se.code());
     }
 
@@ -341,6 +373,7 @@ public class TestRealTimeGet extends TestRTGBase {
       version2 = addAndGetVersion(sdoc("id","1"), params("_version_", Long.toString(version)));
       fail();
     } catch (SolrException se) {
+      assertTrue(se instanceof DocumentDoesNotExist);
       assertEquals(409, se.code());
     }
 
@@ -349,6 +382,7 @@ public class TestRealTimeGet extends TestRTGBase {
       version2 = deleteAndGetVersion("1", params("_version_", Long.toString(version)));
       fail();
     } catch (SolrException se) {
+      assertTrue(se instanceof DocumentDoesNotExist);
       assertEquals(409, se.code());
     }
 

@@ -34,6 +34,7 @@ import org.apache.solr.search.QParserPlugin;
 import org.apache.solr.search.ValueSourceParser;
 import org.apache.solr.update.SolrIndexConfig;
 import org.apache.solr.update.UpdateLog;
+import org.apache.solr.update.UpdateSemanticsMode;
 import org.apache.solr.update.processor.UpdateRequestProcessorChain;
 import org.apache.solr.spelling.QueryConverter;
 import org.apache.lucene.search.BooleanQuery;
@@ -242,7 +243,8 @@ public class SolrConfig extends Config {
             getInt("updateHandler/commitIntervalLowerBound",-1),
             getInt("updateHandler/autoSoftCommit/maxDocs",-1),
             getInt("updateHandler/autoSoftCommit/maxTime",-1),
-            getBool("updateHandler/commitWithin/softCommit",true));
+            getBool("updateHandler/commitWithin/softCommit",true),
+            get("updateHandler/semanticsMode",null));
   }
 
   private void loadPluginInfo(Class clazz, String tag, boolean requireName, boolean requireClass) {
@@ -407,6 +409,7 @@ public class SolrConfig extends Config {
         autoSoftCommmitMaxDocs,autoSoftCommmitMaxTime;
     public final boolean openSearcher;  // is opening a new searcher part of hard autocommit?
     public final boolean commitWithinSoftCommit;
+    public final String semanticsMode;
 
     /**
      * @param autoCommmitMaxDocs set -1 as default
@@ -414,7 +417,7 @@ public class SolrConfig extends Config {
      * @param commitIntervalLowerBound set -1 as default
      */
     public UpdateHandlerInfo(String className, int autoCommmitMaxDocs, int autoCommmitMaxTime, boolean openSearcher, int commitIntervalLowerBound,
-        int autoSoftCommmitMaxDocs, int autoSoftCommmitMaxTime, boolean commitWithinSoftCommit) {
+        int autoSoftCommmitMaxDocs, int autoSoftCommmitMaxTime, boolean commitWithinSoftCommit, String semanticsMode) {
       this.className = className;
       this.autoCommmitMaxDocs = autoCommmitMaxDocs;
       this.autoCommmitMaxTime = autoCommmitMaxTime;
@@ -425,6 +428,7 @@ public class SolrConfig extends Config {
       this.autoSoftCommmitMaxTime = autoSoftCommmitMaxTime;
       
       this.commitWithinSoftCommit = commitWithinSoftCommit;
+      this.semanticsMode = semanticsMode;
     } 
   }
 

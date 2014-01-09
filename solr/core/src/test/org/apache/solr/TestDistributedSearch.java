@@ -25,6 +25,7 @@ import java.util.Map;
 import org.apache.commons.lang.StringUtils;
 import org.apache.lucene.search.FieldCache;
 import org.apache.lucene.util.LuceneTestCase.Slow;
+import org.apache.solr.client.solrj.SolrRequest.METHOD;
 import org.apache.solr.client.solrj.SolrServer;
 import org.apache.solr.client.solrj.SolrServerException;
 import org.apache.solr.client.solrj.embedded.JettySolrRunner;
@@ -35,6 +36,8 @@ import org.apache.solr.common.params.CommonParams;
 import org.apache.solr.common.params.ModifiableSolrParams;
 import org.apache.solr.common.params.ShardParams;
 import org.apache.solr.common.util.NamedList;
+
+import static org.apache.solr.client.solrj.embedded.JettySolrRunner.*;
 
 /**
  * TODO? perhaps use:
@@ -408,7 +411,7 @@ public class TestDistributedSearch extends BaseDistributedSearchTestCase {
     }
     // TODO: look into why passing true causes fails
     params.set("distrib", "false");
-    final QueryResponse controlRsp = controlClient.query(params);
+    final QueryResponse controlRsp = controlClient.query(params, METHOD.GET, SEARCH_CREDENTIALS);
     validateControlData(controlRsp);
 
     params.remove("distrib");
@@ -429,7 +432,7 @@ public class TestDistributedSearch extends BaseDistributedSearchTestCase {
               int which = r.nextInt(upClients.size());
               SolrServer client = upClients.get(which);
               try {
-                QueryResponse rsp = client.query(new ModifiableSolrParams(params));
+                QueryResponse rsp = client.query(new ModifiableSolrParams(params), METHOD.GET, SEARCH_CREDENTIALS);
                 if (verifyStress) {
                   comparePartialResponses(rsp, controlRsp, upShards);
                 }
@@ -452,7 +455,7 @@ public class TestDistributedSearch extends BaseDistributedSearchTestCase {
     // query a random "up" server
     int which = r.nextInt(upClients.size());
     SolrServer client = upClients.get(which);
-    QueryResponse rsp = client.query(params);
+    QueryResponse rsp = client.query(params, METHOD.GET, SEARCH_CREDENTIALS);
     return rsp;
   }
 

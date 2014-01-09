@@ -32,12 +32,20 @@ import java.util.Set;
  *
  * @since solr 1.3
  */
-public class SolrInputDocument implements Map<String,SolrInputField>, Iterable<SolrInputField>, Serializable
+public class SolrInputDocument implements Map<String,SolrInputField>, Iterable<SolrInputField>, RequestPart, Serializable
 {
+	public static final String VERSION_FIELD="_version_";
   private final Map<String,SolrInputField> _fields;
   private float _documentBoost = 1.0f;
+  private RequestPartImpl partImpl;
 
   public SolrInputDocument() {
+    partImpl = new RequestPartImpl();
+    _fields = new LinkedHashMap<String,SolrInputField>();
+  }
+
+  public SolrInputDocument(String uniquePartRef) {
+  	partImpl = new RequestPartImpl(uniquePartRef);
     _fields = new LinkedHashMap<String,SolrInputField>();
   }
   
@@ -56,10 +64,24 @@ public class SolrInputDocument implements Map<String,SolrInputField>, Iterable<S
     }
   }
 
+  public void copyExceptUniquePartRef( SolrInputDocument to )
+  {
+    for( SolrInputField field : this ) {
+      to.addField( field.getName(), field.getValue(), field.getBoost() );
+    }
+    to.setDocumentBoost(this.getDocumentBoost());
+  }
+
+
   ///////////////////////////////////////////////////////////////////
   // Add / Set fields
   ///////////////////////////////////////////////////////////////////
 
+  public String getUniquePartRef()
+  {
+  	return partImpl.getUniquePartRef();
+  }
+  
   /** 
    * Add a field with implied null value for boost.
    * 
@@ -178,6 +200,15 @@ public class SolrInputDocument implements Map<String,SolrInputField>, Iterable<S
     return _fields.values().iterator();
   }
   
+  public Long getVersion() {
+  	SolrInputField versionField = getField(VERSION_FIELD);
+    if (versionField != null) {
+      Object o = versionField.getValue();
+      return (o instanceof Number)?((Number)o).longValue():Long.parseLong(o.toString());
+    }
+    return null;
+  }
+  
   public float getDocumentBoost() {
     return _documentBoost;
   }
@@ -193,7 +224,7 @@ public class SolrInputDocument implements Map<String,SolrInputField>, Iterable<S
   }
   
   public SolrInputDocument deepCopy() {
-    SolrInputDocument clone = new SolrInputDocument();
+    SolrInputDocument clone = new SolrInputDocument(getUniquePartRef());
     Set<Entry<String,SolrInputField>> entries = _fields.entrySet();
     for (Map.Entry<String,SolrInputField> fieldEntry : entries) {
       clone._fields.put(fieldEntry.getKey(), fieldEntry.getValue().deepCopy());

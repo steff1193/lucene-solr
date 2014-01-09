@@ -85,27 +85,11 @@ public class XML {
     escape(chars, start, length, out, attribute_escapes);
   }
 
-
-  public final static void writeXML(Writer out, String tag, String val) throws IOException {
-    out.write('<');
-    out.write(tag);
-    if (val == null) {
-      out.write('/');
-      out.write('>');
-    } else {
-      out.write('>');
-      escapeCharData(val,out);
-      out.write('<');
-      out.write('/');
-      out.write(tag);
-      out.write('>');
-    }
-  }
-
   /** does NOT escape character data in val, must already be valid XML */
   public final static void writeUnescapedXML(Writer out, String tag, String val, Object... attrs) throws IOException {
     out.write('<');
     out.write(tag);
+    if (attrs != null) {
     for (int i=0; i<attrs.length; i++) {
       out.write(' ');
       out.write(attrs[i++].toString());
@@ -113,6 +97,7 @@ public class XML {
       out.write('"');
       out.write(attrs[i].toString());
       out.write('"');
+    }
     }
     if (val == null) {
       out.write('/');
@@ -131,6 +116,7 @@ public class XML {
   public final static void writeXML(Writer out, String tag, String val, Object... attrs) throws IOException {
     out.write('<');
     out.write(tag);
+    if (attrs != null) {
     for (int i=0; i<attrs.length; i++) {
       out.write(' ');
       out.write(attrs[i++].toString());
@@ -138,6 +124,7 @@ public class XML {
       out.write('"');
       escapeAttributeValue(attrs[i].toString(), out);
       out.write('"');
+    }
     }
     if (val == null) {
       out.write('/');

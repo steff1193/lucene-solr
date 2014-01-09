@@ -34,7 +34,9 @@ public interface UpdateParams
 
   public static String SOFT_COMMIT = "softCommit";
   
-  /** overwrite indexing fields */
+  /** 
+   * overwrite indexing document - only used when running semanticsMode "classic" (or "classic-consistency-hybrid")
+   */
   public static String OVERWRITE = "overwrite";
   
   /** Commit everything after the command completes */

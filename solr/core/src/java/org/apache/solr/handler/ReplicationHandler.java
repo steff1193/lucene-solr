@@ -70,6 +70,7 @@ import org.apache.solr.request.SolrQueryRequest;
 import org.apache.solr.response.BinaryQueryResponseWriter;
 import org.apache.solr.response.SolrQueryResponse;
 import org.apache.solr.search.SolrIndexSearcher;
+import org.apache.solr.security.InterSolrNodeAuthCredentialsFactory.AuthCredentialsSource;
 import org.apache.solr.update.SolrIndexWriter;
 import org.apache.solr.util.NumberUtils;
 import org.apache.solr.util.PropertiesInputStream;
@@ -163,7 +164,7 @@ public class ReplicationHandler extends RequestHandlerBase implements SolrCoreAw
   private AtomicBoolean replicationEnabled = new AtomicBoolean(true);
 
   @Override
-  public void handleRequestBody(SolrQueryRequest req, SolrQueryResponse rsp) throws Exception {
+  public void handleRequestBody(final SolrQueryRequest req, SolrQueryResponse rsp) throws Exception {
     rsp.setHttpCaching(false);
     final SolrParams solrParams = req.getParams();
     String command = solrParams.get(COMMAND);
@@ -217,7 +218,7 @@ public class ReplicationHandler extends RequestHandlerBase implements SolrCoreAw
       Thread puller = new Thread("explicit-fetchindex-cmd") {
         @Override
         public void run() {
-          doFetch(paramsCopy, false);
+          doFetch(paramsCopy, false, AuthCredentialsSource.useAuthCredentialsFromOuterRequest(req));
         }
       };
       puller.start();
@@ -305,7 +306,7 @@ public class ReplicationHandler extends RequestHandlerBase implements SolrCoreAw
 
   private volatile SnapPuller tempSnapPuller;
 
-  public boolean doFetch(SolrParams solrParams, boolean forceReplication) {
+  public boolean doFetch(SolrParams solrParams, boolean forceReplication, AuthCredentialsSource authCredentialsSource) {
     String masterUrl = solrParams == null ? null : solrParams.get(MASTER_URL);
     if (!snapPullLock.tryLock())
       return false;
@@ -314,7 +315,7 @@ public class ReplicationHandler extends RequestHandlerBase implements SolrCoreAw
       if (masterUrl != null) {
         NamedList<Object> nl = solrParams.toNamedList();
         nl.remove(SnapPuller.POLL_INTERVAL);
-        tempSnapPuller = new SnapPuller(nl, this, core);
+        tempSnapPuller = new SnapPuller(nl, this, core, authCredentialsSource);
       }
       return tempSnapPuller.fetchLatestIndex(core, forceReplication);
     } catch (Exception e) {
@@ -853,7 +854,7 @@ public class ReplicationHandler extends RequestHandlerBase implements SolrCoreAw
     NamedList slave = (NamedList) initArgs.get("slave");
     boolean enableSlave = isEnabled( slave );
     if (enableSlave) {
-      tempSnapPuller = snapPuller = new SnapPuller(slave, this, core);
+      tempSnapPuller = snapPuller = new SnapPuller(slave, this, core, AuthCredentialsSource.useInternalAuthCredentials());
       isSlave = true;
     }
     NamedList master = (NamedList) initArgs.get("master");

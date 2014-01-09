@@ -40,11 +40,11 @@ import org.apache.solr.common.params.CoreAdminParams;
 import org.apache.solr.common.params.ModifiableSolrParams;
 import org.apache.solr.common.params.SolrParams;
 import org.apache.solr.common.util.NamedList;
-import org.apache.solr.common.util.SimpleOrderedMap;
 import org.apache.solr.core.CoreContainer;
 import org.apache.solr.handler.RequestHandlerBase;
 import org.apache.solr.request.SolrQueryRequest;
 import org.apache.solr.response.SolrQueryResponse;
+import org.apache.solr.security.InterSolrNodeAuthCredentialsFactory.AuthCredentialsSource;
 import org.apache.zookeeper.KeeperException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -163,12 +163,13 @@ public class CollectionsHandler extends RequestHandlerBase {
         .getOverseerCollectionQueue()
         .offer(ZkStateReader.toJSON(m), timeout);
     if (event.getBytes() != null) {
-      SolrResponse response = SolrResponse.deserialize(event.getBytes());
-      rsp.getValues().addAll(response.getResponse());
-      SimpleOrderedMap exp = (SimpleOrderedMap) response.getResponse().get("exception");
-      if (exp != null) {
-        Integer code = (Integer) exp.get("rspCode");
-        rsp.setException(new SolrException(code != null && code != -1 ? ErrorCode.getErrorCode(code) : ErrorCode.SERVER_ERROR, (String)exp.get("msg")));
+      Object response = SolrResponse.deserialize(event.getBytes());
+      if (response instanceof Exception) {
+        rsp.setException((Exception)response);
+      } else if (response instanceof Throwable) {
+        rsp.setException(new Exception((Throwable)response));
+      } else {
+        rsp.copyFromSolrResponse((SolrResponse)response);
       }
     } else {
       if (System.currentTimeMillis() - time >= timeout) {
@@ -214,6 +215,7 @@ public class CollectionsHandler extends RequestHandlerBase {
     reqSyncShard.setCollection(collection);
     reqSyncShard.setShard(shard);
     reqSyncShard.setCoreName(nodeProps.getCoreName());
+    reqSyncShard.setAuthCredentials(AuthCredentialsSource.useAuthCredentialsFromOuterRequest(req).getAuthCredentials());
     server.request(reqSyncShard);
   }
   
@@ -260,7 +262,7 @@ public class CollectionsHandler extends RequestHandlerBase {
   private void handleCreateAction(SolrQueryRequest req,
       SolrQueryResponse rsp) throws InterruptedException, KeeperException {
     log.info("Creating Collection : " + req.getParamString());
-    Integer numReplicas = req.getParams().getInt(OverseerCollectionProcessor.REPLICATION_FACTOR, 1);
+    Integer numReplicas = req.getParams().getInt(OverseerCollectionProcessor.REPLICATION_FACTOR, 0);
     String name = req.getParams().required().get("name");
     String configName = req.getParams().get("collection.configName");
     String numShards = req.getParams().get(OverseerCollectionProcessor.NUM_SLICES);

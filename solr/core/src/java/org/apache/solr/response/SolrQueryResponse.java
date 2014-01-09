@@ -17,12 +17,23 @@
 
 package org.apache.solr.response;
 
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import org.apache.solr.client.solrj.SolrResponse;
+import org.apache.solr.common.SolrException;
+import org.apache.solr.common.SolrException.ErrorCode;
+import org.apache.solr.common.exceptions.PartialErrors;
 import org.apache.solr.common.util.NamedList;
 import org.apache.solr.common.util.SimpleOrderedMap;
 import org.apache.solr.search.ReturnFields;
 import org.apache.solr.search.SolrReturnFields;
-
-import java.util.*;
 
 /**
  * <code>SolrQueryResponse</code> is used by a query handler to return
@@ -70,6 +81,7 @@ public class SolrQueryResponse {
    */
   protected NamedList<Object> values = new SimpleOrderedMap<Object>();
   
+  protected Map<String, SolrException> partsRefToPartialErrorMap = new HashMap<String, SolrException>();
   
 /**
    * Container for storing information that should be logged by Solr before returning.
@@ -78,7 +90,7 @@ public class SolrQueryResponse {
 
   protected ReturnFields returnFields;
 
-  // error if this is set...
+  // entire request failed if this is set...
   protected Exception err;
 
   /**
@@ -147,14 +159,58 @@ public class SolrQueryResponse {
     err=e;
   }
 
+  public void addHandledPart(String partRef) {
+    SolrResponse.addHandledPart(values, partRef);
+  }
+    
   /**
    * Returns an Exception if there was a fatal error in processing the request.
    * Returns null if the request succeeded.
    */
   public Exception getException() {
+  	if (err == null) {
+      @SuppressWarnings("unchecked")
+      // If only on part of request handled and it resulted in error, throw corresponding exception for convenience
+      SolrException singlePartialError;
+      List<String> handledPartsRef = SolrResponse.getHandledPartsRef(getValues());
+      if ((handledPartsRef != null) && handledPartsRef.size() == 1 && (singlePartialError = SolrResponse.getPartialError(partsRefToPartialErrorMap, getValues(), handledPartsRef.iterator().next())) != null) {
+      	SolrResponse.removeAllPartsRef(partsRefToPartialErrorMap, getValues());
+      	err = singlePartialError;
+      } else if (SolrResponse.numberOfPartialErrors(partsRefToPartialErrorMap, getValues()) > 0) {
+      	PartialErrors pes = new PartialErrors(ErrorCode.PRECONDITION_FAILED, "Some parts of the request resulted in errors - other parts might have succeeded. Client needs to check response for partial errors");
+      	pes.setPayload(getValues());
+      	err = pes;
+      }
+  	}
+
     return err;
   }
 
+  public void addPartialError(String partRef, SolrException err) {
+  	SolrResponse.addPartialError(partsRefToPartialErrorMap, getValues(), partRef, err);
+  }
+  
+  public void copyFromSolrResponse(SolrResponse from) {
+    List<String> handledPartsRef = from.getHandledPartsRef();
+    if (handledPartsRef != null) {
+      for (String handledPart : handledPartsRef) {
+        addHandledPart(handledPart);
+      }
+    }
+    Map<String, SolrException> pes = from.getPartialErrors();
+    for (String key : pes.keySet()) {
+      addPartialError(key, pes.get(key));
+    }
+    
+    if (pes.size() == 0) {
+      for (Map.Entry<String,Object> entry : from.getResponse()) {
+        if (!entry.getKey().equals(SolrResponse.HANDLED_PARTS_KEY) && !entry.getKey().equals(SolrResponse.PARTIAL_ERRORS_KEY)) {
+          getValues().add(entry.getKey(), entry.getValue());
+        }
+      }
+    }
+  }
+  
   /**
    * The endtime of the request in milliseconds.
    * Used to calculate query time.

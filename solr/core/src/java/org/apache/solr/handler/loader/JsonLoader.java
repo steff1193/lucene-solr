@@ -326,7 +326,7 @@ public class JsonLoader extends ContentStreamLoader {
     {
       AddUpdateCommand cmd = new AddUpdateCommand(req);
       cmd.commitWithin = commitWithin;
-      cmd.overwrite = overwrite;
+      cmd.classicOverwrite = overwrite;
   
       float boost = 1.0f;
       
@@ -343,7 +343,7 @@ public class JsonLoader extends ContentStreamLoader {
               cmd.solrDoc = parseDoc( ev );
             }
             else if( UpdateRequestHandler.OVERWRITE.equals( key ) ) {
-              cmd.overwrite = parser.getBoolean(); // reads next boolean
+              cmd.classicOverwrite = parser.getBoolean(); // reads next boolean
             }
             else if( UpdateRequestHandler.COMMIT_WITHIN.equals( key ) ) {
               cmd.commitWithin = (int)parser.getLong();
@@ -382,7 +382,7 @@ public class JsonLoader extends ContentStreamLoader {
       while( true ) {
         AddUpdateCommand cmd = new AddUpdateCommand(req);
         cmd.commitWithin = commitWithin;
-        cmd.overwrite = overwrite;
+        cmd.classicOverwrite = overwrite;
   
         int ev = parser.nextEvent();
         if (ev == JSONParser.ARRAY_END) break;
@@ -416,30 +416,50 @@ public class JsonLoader extends ContentStreamLoader {
   
       SolrInputDocument sdoc = new SolrInputDocument();
       for (;;) {
-        SolrInputField sif = parseField();
-        if (sif == null) return sdoc;
+        Object parseResult = parseField();
+        if (parseResult == null) return sdoc;
+        if (parseResult instanceof SolrInputField) {
+          SolrInputField sif = (SolrInputField)parseResult;
         SolrInputField prev = sdoc.put(sif.getName(), sif);
         if (prev != null) {
           // blech - repeated keys
           sif.addValue(prev.getValue(), prev.getBoost());
         }
+        } else if (parseResult instanceof SolrInputDocument) {
+          SolrInputDocument newSdoc = (SolrInputDocument)parseResult;
+          sdoc.copyExceptUniquePartRef(newSdoc);
+          sdoc = newSdoc;
+        }
       }
     }
   
-    private SolrInputField parseField()  throws IOException {
+    private Object parseField()  throws IOException {
       int ev = parser.nextEvent();
       if (ev == JSONParser.OBJECT_END) {
         return null;
       }
   
       String fieldName = parser.getString();
+      if (PART_REF_COLUMN_NAME.equals(fieldName)) {
+        ev = parser.nextEvent();
+        if (ev != JSONParser.STRING) {
+          throw new SolrException(SolrException.ErrorCode.BAD_REQUEST, PART_REF_COLUMN_NAME + " must be a string! ["+ parser.getPosition()+"]" );
+        }
+        SolrInputDocument newSdoc = new SolrInputDocument(parser.getString());
+        return newSdoc;
+      } else {
       SolrInputField sif = new SolrInputField(fieldName);
       parseFieldValue(sif);
       return sif;
     }
+    }
   
     private void parseFieldValue(SolrInputField sif) throws IOException {
       int ev = parser.nextEvent();
+      if (ev != JSONParser.STRING && PART_REF_COLUMN_NAME.equals(sif.getName())) {
+        throw new SolrException(SolrException.ErrorCode.BAD_REQUEST, PART_REF_COLUMN_NAME + " must be a string! ["+ parser.getPosition()+"]" );
+      }
+
       if (ev == JSONParser.OBJECT_START) {
         parseExtendedFieldValue(sif, ev);
       } else {

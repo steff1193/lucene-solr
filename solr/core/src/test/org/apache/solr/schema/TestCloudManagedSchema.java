@@ -16,6 +16,8 @@ package org.apache.solr.schema;
  * limitations under the License.
  */
 
+import static org.apache.solr.client.solrj.embedded.JettySolrRunner.ALL_CREDENTIALS;
+
 import org.apache.commons.io.IOUtils;
 import org.apache.solr.client.solrj.ResponseParser;
 import org.apache.solr.client.solrj.SolrServer;
@@ -50,6 +52,7 @@ public class TestCloudManagedSchema extends AbstractFullDistribZkTestBase {
     params.set(CoreAdminParams.ACTION, CoreAdminParams.CoreAdminAction.STATUS.toString());
     QueryRequest request = new QueryRequest(params);
     request.setPath("/admin/cores");
+    request.setAuthCredentials(ALL_CREDENTIALS);
     int which = r.nextInt(clients.size());
     HttpSolrServer client = (HttpSolrServer)clients.get(which);
     String previousBaseURL = client.getBaseURL();
@@ -78,6 +81,7 @@ public class TestCloudManagedSchema extends AbstractFullDistribZkTestBase {
   private String getFileContentFromZooKeeper(String fileName) throws IOException, SolrServerException {
     QueryRequest request = new QueryRequest(params("file", fileName));
     request.setPath("/admin/file");
+    request.setAuthCredentials(ALL_CREDENTIALS);
     RawResponseParser responseParser = new RawResponseParser();
     request.setResponseParser(responseParser);
     int which = r.nextInt(clients.size());
@@ -113,7 +117,7 @@ public class TestCloudManagedSchema extends AbstractFullDistribZkTestBase {
 
   protected final void assertFileNotInZooKeeper(String fileName) throws Exception {
     // Stolen from AbstractBadConfigTestBase
-    String errString = "returned non ok status:404, message:Not Found";
+    String errString = "returned non ok status:404, message:Can not find";
     ignoreException(Pattern.quote(errString));
     String rawContent = null;
     try {
@@ -123,7 +127,7 @@ public class TestCloudManagedSchema extends AbstractFullDistribZkTestBase {
       if (-1 != e.getMessage().indexOf(errString)) return;
       // otherwise, rethrow it, possibly completely unrelated
       throw new SolrException(SolrException.ErrorCode.SERVER_ERROR, 
-                              "Unexpected error, expected error matching: " + errString, e);
+                              "Unexpected error, expected error message containing: " + errString + ", but found error message: " + e.getMessage(), e);
     } finally {
       resetExceptionIgnores();
     }

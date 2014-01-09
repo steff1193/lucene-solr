@@ -19,6 +19,7 @@ package org.apache.solr.update;
 
 import org.apache.solr.common.SolrInputDocument;
 import org.apache.solr.request.SolrQueryRequest;
+import org.apache.solr.request.SolrRequestInfo;
 import org.apache.solr.util.AbstractSolrTestCase;
 import org.apache.solr.common.util.StrUtils;
 import org.junit.AfterClass;
@@ -70,7 +71,8 @@ public class TestIndexingPerformance extends AbstractSolrTestCase {
     }
 
 
-    SolrQueryRequest req = lrf.makeRequest();
+    SolrRequestInfo reqInfo = lrf.makeRequestInfo();
+    SolrQueryRequest req = reqInfo.getReq();
     UpdateHandler updateHandler = req.getCore().getUpdateHandler();
     String field = "textgap";
 
@@ -103,7 +105,7 @@ public class TestIndexingPerformance extends AbstractSolrTestCase {
     long start = System.currentTimeMillis();
 
     AddUpdateCommand add = new AddUpdateCommand(req);
-    add.overwrite = overwrite;
+    add.classicOverwrite = overwrite;
 
     for (int i=0; i<iter; i++) {
       add.clear();

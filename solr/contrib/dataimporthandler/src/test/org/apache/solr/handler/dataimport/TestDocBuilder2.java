@@ -20,7 +20,7 @@ import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
 
-import org.apache.solr.request.LocalSolrQueryRequest;
+import org.apache.solr.request.SolrQueryRequest;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -94,10 +94,10 @@ public class TestDocBuilder2 extends AbstractDataImportHandlerTestCase {
     rows.add(createMap("id", "101", "desc", "ApacheSolr"));
     MockDataSource.setIterator("select * from books where category='search'", rows.iterator());
 
-    LocalSolrQueryRequest request = lrf.makeRequest("command", "full-import",
+    SolrQueryRequest request = lrf.makeRequestInfo("command", "full-import",
             "debug", "on", "clean", "true", "commit", "true",
             "category", "search",
-            "dataConfig", requestParamAsVariable);
+            "dataConfig", requestParamAsVariable).getReq();
     h.query("/dataimport", request);
     assertQ(req("desc:ApacheSolr"), "//*[@numFound='1']");
   }
@@ -109,10 +109,10 @@ public class TestDocBuilder2 extends AbstractDataImportHandlerTestCase {
     rows.add(createMap("mypk", "101", "text", "ApacheSolr"));
     MockDataSource.setIterator("select * from x", rows.iterator());
 
-    LocalSolrQueryRequest request = lrf.makeRequest("command", "full-import",
+    SolrQueryRequest request = lrf.makeRequestInfo("command", "full-import",
             "debug", "on", "clean", "true", "commit", "true",
             "mypk", "id", "text", "desc",
-            "dataConfig", dataConfigWithTemplatizedFieldNames);
+            "dataConfig", dataConfigWithTemplatizedFieldNames).getReq();
     h.query("/dataimport", request);
     assertQ(req("id:101"), "//*[@numFound='1']");
   }
@@ -227,7 +227,13 @@ public class TestDocBuilder2 extends AbstractDataImportHandlerTestCase {
     
     MockDataSource.clearCache();
     rows = new ArrayList();
-    rows.add(createMap("$deleteDocById", "3"));
+    rows.add(createMap(
+        // Added this doc with id=4 because if I do not do it it will try to index a "default" document without id
+        // but with name_s=xyz and that fails with an "required field id is missing", and with correct exception transport
+        // back you will get an exception out of runFullImport below. What ought to happen here it that no document without
+        // id and with name_s=xyz ought to be indexed
+        "id", "4", "desc", "three", 
+        "$deleteDocById", "3"));
     MockDataSource.setIterator("select * from x", rows.iterator());
     runFullImport(dataConfigForSkipTransform, createMap("clean","false"));
     assertQ(req("id:3"), "//*[@numFound='0']");

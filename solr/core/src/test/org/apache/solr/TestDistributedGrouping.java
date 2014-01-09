@@ -20,10 +20,13 @@ package org.apache.solr;
 import org.apache.lucene.util.LuceneTestCase.Slow;
 import org.apache.solr.client.solrj.SolrServer;
 import org.apache.solr.client.solrj.SolrServerException;
+import org.apache.solr.client.solrj.SolrRequest.METHOD;
 import org.apache.solr.client.solrj.response.QueryResponse;
 import org.apache.solr.common.params.CommonParams;
 import org.apache.solr.common.params.ModifiableSolrParams;
 import org.apache.solr.common.util.NamedList;
+
+import static org.apache.solr.client.solrj.embedded.JettySolrRunner.*;
 
 /**
  * TODO? perhaps use:
@@ -245,7 +248,7 @@ public class TestDistributedGrouping extends BaseDistributedSearchTestCase {
 
     int which = r.nextInt(clients.size());
     SolrServer client = clients.get(which);
-    QueryResponse rsp = client.query(params);
+    QueryResponse rsp = client.query(params, METHOD.GET, SEARCH_CREDENTIALS);
     NamedList nl = (NamedList<?>) rsp.getResponse().get("grouped");
     nl = (NamedList<?>) nl.getVal(0);
     int matches = (Integer) nl.getVal(0);

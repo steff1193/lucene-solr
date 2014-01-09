@@ -25,6 +25,7 @@ import org.apache.solr.common.SolrException;
 import org.apache.solr.common.params.CommonParams;
 import org.apache.solr.common.params.SolrParams;
 import org.apache.solr.common.util.ContentStream;
+import org.apache.solr.common.util.NamedList;
 
 import java.util.Collection;
 
@@ -33,7 +34,7 @@ import java.util.Collection;
  *
  * @since solr 1.3
  */
-public class QueryRequest extends SolrRequest
+public class QueryRequest extends SolrRequest<QueryResponse>
 {
   private SolrParams query;
   
@@ -83,11 +84,16 @@ public class QueryRequest extends SolrRequest
   }
 
   @Override
+  public QueryResponse getResponse(NamedList<Object> res , SolrServer solrServer) {
+    return new QueryResponse(res, solrServer);
+  }
+
+  @Override
   public QueryResponse process( SolrServer server ) throws SolrServerException 
   {
     try {
       long startTime = System.currentTimeMillis();
-      QueryResponse res = new QueryResponse( server.request( this ), server );
+      QueryResponse res = super.process(server);
       res.setElapsedTime( System.currentTimeMillis()-startTime );
       return res;
     } catch (SolrServerException e){

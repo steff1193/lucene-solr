@@ -17,13 +17,10 @@
 
 package org.apache.solr.client.solrj.request;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
-import org.apache.solr.client.solrj.SolrServer;
-import org.apache.solr.client.solrj.SolrServerException;
 import org.apache.solr.client.solrj.SolrRequest;
 import org.apache.solr.client.solrj.response.LukeResponse;
 import org.apache.solr.common.params.CommonParams;
@@ -36,7 +33,7 @@ import org.apache.solr.common.util.ContentStream;
  *
  * @since solr 1.3
  */
-public class LukeRequest extends SolrRequest
+public class LukeRequest extends SolrRequest<LukeResponse>
 {
   private List<String> fields;
   private int numTerms = -1;
@@ -113,14 +110,5 @@ public class LukeRequest extends SolrRequest
     return params;
   }
 
-  @Override
-  public LukeResponse process( SolrServer server ) throws SolrServerException, IOException 
-  {
-    long startTime = System.currentTimeMillis();
-    LukeResponse res = new LukeResponse();
-    res.setResponse( server.request( this ) );
-    res.setElapsedTime( System.currentTimeMillis()-startTime );
-    return res;
-  }
 }
 

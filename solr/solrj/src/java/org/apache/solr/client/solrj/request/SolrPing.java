@@ -17,12 +17,10 @@
 
 package org.apache.solr.client.solrj.request;
 
-import java.io.IOException;
 import java.util.Collection;
 
 import org.apache.solr.client.solrj.SolrRequest;
 import org.apache.solr.client.solrj.SolrServer;
-import org.apache.solr.client.solrj.SolrServerException;
 import org.apache.solr.client.solrj.response.SolrPingResponse;
 import org.apache.solr.common.params.CommonParams;
 import org.apache.solr.common.params.ModifiableSolrParams;
@@ -35,7 +33,7 @@ import org.apache.solr.common.util.ContentStream;
  * 
  * @since solr 1.3
  */
-public class SolrPing extends SolrRequest {
+public class SolrPing extends SolrRequest<SolrPingResponse> {
   
   /** serialVersionUID. */
   private static final long serialVersionUID = 5828246236669090017L;
@@ -59,16 +57,6 @@ public class SolrPing extends SolrRequest {
   @Override
   public ModifiableSolrParams getParams() {
     return params;
-  }
-  
-  @Override
-  public SolrPingResponse process(SolrServer server)
-      throws SolrServerException, IOException {
-    long startTime = System.currentTimeMillis();
-    SolrPingResponse res = new SolrPingResponse();
-    res.setResponse(server.request(this));
-    res.setElapsedTime(System.currentTimeMillis() - startTime);
-    return res;
   }
   
   /**
