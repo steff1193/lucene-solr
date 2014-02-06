@@ -9,12 +9,6 @@
 
 '''NO WARRANTY!!!''' Not on code, binaries or anything else.
 
-The following '''branches point to code containing the improvements''' (the rest of the branches are just replica of Apache branches)
-* ''my_lucene_solr_4_4_0'': Release/tag lucene_solr_4_4_0 from Apache plus all current improvements
-
-The following tags point to '''released code containing the improvements''' (the rest of the branches are just replica of Apache branches)
-* ''Currently none''
-
 '''List of improvements'''
 * Support for optimistic locking - the cool solution ([https://issues.apache.org/jira/browse/SOLR-3173 SOLR-3173], [https://issues.apache.org/jira/browse/SOLR-3178 SOLR-3178] and [https://issues.apache.org/jira/browse/SOLR-3382 SOLR-3382])
 ** Typed exceptions (VersionConflict, DocAlredyExists and DocDoesNotExist) propagated to SolrJ client
