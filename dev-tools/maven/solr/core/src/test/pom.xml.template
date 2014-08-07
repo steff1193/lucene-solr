@@ -21,14 +21,14 @@
   -->
   <modelVersion>4.0.0</modelVersion>
   <parent>
-    <groupId>org.apache.solr</groupId>
-    <artifactId>solr-parent</artifactId>
+    <groupId>@solr-groupId@</groupId>
+    <artifactId>@solr-name@-parent</artifactId>
     <version>@version@</version>
     <relativePath>../../../pom.xml</relativePath>
   </parent>
-  <groupId>org.apache.solr</groupId>
-  <artifactId>solr-core-tests</artifactId>
-  <name>Apache Solr Core tests</name>
+  <groupId>@solr-groupId@</groupId>
+  <artifactId>@solr-name@-core-tests</artifactId>
+  <name>@company-name@ @Solr-name@ Core tests</name>
   <packaging>jar</packaging>
   <properties>
     <module-directory>solr/core</module-directory>
@@ -40,14 +40,14 @@
       <!-- lucene-test-framework dependency must be declared before lucene-core -->
       <!-- This dependency cannot be put into solr-parent, because local        -->
       <!-- dependencies are always ordered before inherited dependencies.       -->
-      <groupId>org.apache.lucene</groupId>
-      <artifactId>lucene-test-framework</artifactId>
+      <groupId>@lucene-groupId@</groupId>
+      <artifactId>@lucene-name@-test-framework</artifactId>
       <version>${project.version}</version>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>${project.groupId}</groupId>
-      <artifactId>solr-test-framework</artifactId>
+      <artifactId>@solr-name@-test-framework</artifactId>
       <version>${project.version}</version>
       <scope>test</scope>
     </dependency>

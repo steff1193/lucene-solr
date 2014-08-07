@@ -21,17 +21,17 @@
   -->
   <modelVersion>4.0.0</modelVersion>
   <parent>
-    <groupId>org.apache.lucene</groupId>
-    <artifactId>lucene-parent</artifactId>
+    <groupId>@lucene-groupId@</groupId>
+    <artifactId>@lucene-name@-parent</artifactId>
     <version>@version@</version>
     <relativePath>../../../pom.xml</relativePath>
   </parent>
-  <groupId>org.apache.lucene</groupId>
-  <artifactId>lucene-codecs</artifactId>
+  <groupId>@lucene-groupId@</groupId>
+  <artifactId>@lucene-name@-codecs</artifactId>
   <packaging>jar</packaging>
-  <name>Lucene codecs</name>
+  <name>@Lucene-name@ codecs</name>
   <description>
-    Codecs and postings formats for Apache Lucene.
+    Codecs and postings formats for @company-name@ @Lucene-name@.
   </description>
   <properties>
     <module-directory>lucene/codecs</module-directory>
@@ -39,14 +39,14 @@
     <module-path>${relative-top-level}/${module-directory}/src/java</module-path>
   </properties>
   <scm>
-    <connection>scm:svn:${vc-anonymous-base-url}/${module-directory}</connection>
-    <developerConnection>scm:svn:${vc-dev-base-url}/${module-directory}</developerConnection>
+    <connection>scm:git:${vc-anonymous-base-url}/${module-directory}</connection>
+    <developerConnection>scm:git:${vc-dev-base-url}/${module-directory}</developerConnection>
     <url>${vc-browse-base-url}/${module-directory}</url>
   </scm>
   <dependencies>
     <dependency>
       <groupId>${project.groupId}</groupId>
-      <artifactId>lucene-core</artifactId>
+      <artifactId>@lucene-name@-core</artifactId>
       <version>${project.version}</version>
     </dependency>
   </dependencies>

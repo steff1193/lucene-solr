@@ -135,6 +135,13 @@
       <fileset dir="${basedir}/dev-tools/maven"/>
       <filterset begintoken="@" endtoken="@">
         <filter token="version" value="${version}"/>
+      	<filter token="company-name" value="${company_name}"/>
+       	<filter token="solr-groupId" value="${solr_groupId}"/>
+        <filter token="solr-name" value="${solr_name}"/>
+        <filter token="Solr-name" value="${big_solr_name}"/>
+       	<filter token="lucene-groupId" value="${lucene_groupId}"/>
+        <filter token="lucene-name" value="${lucene_name}"/>
+        <filter token="Lucene-name" value="${big_lucene_name}"/>
       </filterset>
       <globmapper from="*.template" to="*"/>
     </copy>

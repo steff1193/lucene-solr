@@ -21,107 +21,107 @@
   -->
   <modelVersion>4.0.0</modelVersion>
   <parent>
-    <groupId>org.apache.solr</groupId>
-    <artifactId>solr-parent</artifactId>
+    <groupId>@solr-groupId@</groupId>
+    <artifactId>@solr-name@-parent</artifactId>
     <version>@version@</version>
     <relativePath>../../../pom.xml</relativePath>
   </parent>
-  <groupId>org.apache.solr</groupId>
-  <artifactId>solr-core</artifactId>
+  <groupId>@solr-groupId@</groupId>
+  <artifactId>@solr-name@-core</artifactId>
   <packaging>jar</packaging>
-  <name>Apache Solr Core</name>
-  <description>Apache Solr Core</description>
+  <name>@company-name@ @Solr-name@ Core</name>
+  <description>@company-name@ @Solr-name@ Core</description>
   <properties>
     <module-directory>solr/core</module-directory>
     <relative-top-level>../../../../..</relative-top-level>
     <module-path>${relative-top-level}/${module-directory}/src/java</module-path>
   </properties>
   <scm>
-    <connection>scm:svn:${vc-anonymous-base-url}/${module-directory}</connection>
-    <developerConnection>scm:svn:${vc-dev-base-url}/${module-directory}</developerConnection>
+    <connection>scm:git:${vc-anonymous-base-url}/${module-directory}</connection>
+    <developerConnection>scm:git:${vc-dev-base-url}/${module-directory}</developerConnection>
     <url>${vc-browse-base-url}/${module-directory}</url>
   </scm>
   <dependencies>
     <dependency>
       <groupId>${project.groupId}</groupId>
-      <artifactId>solr-solrj</artifactId>
+      <artifactId>@solr-name@-@solr-name@j</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
-      <groupId>org.apache.lucene</groupId>
-      <artifactId>lucene-core</artifactId>
+      <groupId>@lucene-groupId@</groupId>
+      <artifactId>@lucene-name@-core</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
-      <groupId>org.apache.lucene</groupId>
-      <artifactId>lucene-codecs</artifactId>
+      <groupId>@lucene-groupId@</groupId>
+      <artifactId>@lucene-name@-codecs</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
-      <groupId>org.apache.lucene</groupId>
-      <artifactId>lucene-analyzers-common</artifactId>
+      <groupId>@lucene-groupId@</groupId>
+      <artifactId>@lucene-name@-analyzers-common</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
-      <groupId>org.apache.lucene</groupId>
-      <artifactId>lucene-analyzers-kuromoji</artifactId>
+      <groupId>@lucene-groupId@</groupId>
+      <artifactId>@lucene-name@-analyzers-kuromoji</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
-      <groupId>org.apache.lucene</groupId>
-      <artifactId>lucene-analyzers-morfologik</artifactId>
+      <groupId>@lucene-groupId@</groupId>
+      <artifactId>@lucene-name@-analyzers-morfologik</artifactId>
       <version>${project.version}</version>
       <optional>true</optional>
     </dependency>
     <dependency>
-      <groupId>org.apache.lucene</groupId>
-      <artifactId>lucene-analyzers-phonetic</artifactId>
+      <groupId>@lucene-groupId@</groupId>
+      <artifactId>@lucene-name@-analyzers-phonetic</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
-      <groupId>org.apache.lucene</groupId>
-      <artifactId>lucene-highlighter</artifactId>
+      <groupId>@lucene-groupId@</groupId>
+      <artifactId>@lucene-name@-highlighter</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
-      <groupId>org.apache.lucene</groupId>
-      <artifactId>lucene-memory</artifactId>
+      <groupId>@lucene-groupId@</groupId>
+      <artifactId>@lucene-name@-memory</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
-      <groupId>org.apache.lucene</groupId>
-      <artifactId>lucene-misc</artifactId>
+      <groupId>@lucene-groupId@</groupId>
+      <artifactId>@lucene-name@-misc</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
-      <groupId>org.apache.lucene</groupId>
-      <artifactId>lucene-queryparser</artifactId>
+      <groupId>@lucene-groupId@</groupId>
+      <artifactId>@lucene-name@-queryparser</artifactId>
       <version>${project.version}</version>
       <exclusions>
         <exclusion>
-          <groupId>org.apache.lucene</groupId>
-          <artifactId>lucene-sandbox</artifactId>
+          <groupId>@lucene-groupId@</groupId>
+          <artifactId>@lucene-name@-sandbox</artifactId>
         </exclusion>
       </exclusions>
     </dependency>
     <dependency>
-      <groupId>org.apache.lucene</groupId>
-      <artifactId>lucene-spatial</artifactId>
+      <groupId>@lucene-groupId@</groupId>
+      <artifactId>@lucene-name@-spatial</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
-      <groupId>org.apache.lucene</groupId>
-      <artifactId>lucene-suggest</artifactId>
+      <groupId>@lucene-groupId@</groupId>
+      <artifactId>@lucene-name@-suggest</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
-      <groupId>org.apache.lucene</groupId>
-      <artifactId>lucene-grouping</artifactId>
+      <groupId>@lucene-groupId@</groupId>
+      <artifactId>@lucene-name@-grouping</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
-      <groupId>org.apache.lucene</groupId>
-      <artifactId>lucene-queries</artifactId>
+      <groupId>@lucene-groupId@</groupId>
+      <artifactId>@lucene-name@-queries</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>

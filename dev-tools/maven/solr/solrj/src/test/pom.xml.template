@@ -21,14 +21,14 @@
   -->
   <modelVersion>4.0.0</modelVersion>
   <parent>
-    <groupId>org.apache.solr</groupId>
-    <artifactId>solr-parent</artifactId>
+    <groupId>@solr-groupId@</groupId>
+    <artifactId>@solr-name@-parent</artifactId>
     <version>@version@</version>
     <relativePath>../../../pom.xml</relativePath>
   </parent>
-  <groupId>org.apache.solr</groupId>
-  <artifactId>solr-solrj-tests</artifactId>
-  <name>Apache Solr Solrj tests</name>
+  <groupId>@solr-groupId@</groupId>
+  <artifactId>@solr-name@-@solr-name@j-tests</artifactId>
+  <name>@company-name@ @Solr-name@ @Solr-name@j tests</name>
   <packaging>jar</packaging>
   <properties>
     <module-directory>solr/solrj</module-directory>
@@ -40,14 +40,14 @@
       <!-- lucene-test-framework dependency must be declared before lucene-core -->
       <!-- This dependency cannot be put into solr-parent, because local        -->
       <!-- dependencies are always ordered before inherited dependencies.       -->
-      <groupId>org.apache.lucene</groupId>
-      <artifactId>lucene-test-framework</artifactId>
+      <groupId>@lucene-groupId@</groupId>
+      <artifactId>@lucene-name@-test-framework</artifactId>
       <version>${project.version}</version>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>${project.groupId}</groupId>
-      <artifactId>solr-test-framework</artifactId>
+      <artifactId>@solr-name@-test-framework</artifactId>
       <version>${project.version}</version>
       <scope>test</scope>
     </dependency>
@@ -122,7 +122,7 @@
               </signaturesFiles>
               <excludes>
                 <!-- violates the servlet-api restrictions, but it is safe to do so in this test: -->
-                <exclude>org/apache/solr/client/solrj/impl/BasicHttpSolrServerTest$DebugServlet.class</exclude>
+                <exclude>org/apache/solr/client/solrj/impl/BasicHttp@Solr-name@ServerTest$DebugServlet.class</exclude>
               </excludes>
             </configuration>
             <goals>

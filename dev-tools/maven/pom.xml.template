@@ -26,21 +26,21 @@
     <version>13</version>
     <relativePath/>
   </parent>
-  <groupId>org.apache.lucene</groupId>
-  <artifactId>lucene-solr-grandparent</artifactId>
+  <groupId>@lucene-groupId@</groupId>
+  <artifactId>@lucene-name@-@solr-name@-grandparent</artifactId>
   <version>@version@</version>
   <packaging>pom</packaging>
-  <name>Grandparent POM for Apache Lucene Core and Apache Solr</name>
-  <description>Grandparent POM for Apache Lucene Core and Apache Solr</description>
-  <url>http://lucene.apache.org</url>
+  <name>Grandparent POM for @company-name@ @Lucene-name@ Core and @company-name@ @Solr-name@</name>
+  <description>Grandparent POM for @company-name@ @Lucene-name@ Core and @company-name@ @Solr-name@</description>
+  <url>https://github.com/steff1193/voyager</url>
   <modules>
     <module>lucene</module>
     <module>solr</module>
   </modules>
   <properties>
-    <vc-anonymous-base-url>http://svn.apache.org/repos/asf/lucene/dev/branches/branch_4x</vc-anonymous-base-url>
-    <vc-dev-base-url>https://svn.apache.org/repos/asf/lucene/dev/branches/branch_4x</vc-dev-base-url>
-    <vc-browse-base-url>http://svn.apache.org/viewvc/lucene/dev/branches/branch_4x</vc-browse-base-url>
+    <vc-anonymous-base-url>https://github.com/steff1193/lucene-solr/tree/my_lucene_solr_4_4_0</vc-anonymous-base-url>
+    <vc-dev-base-url>https://github.com/steff1193/lucene-solr/tree/my_lucene_solr_4_4_0</vc-dev-base-url>
+    <vc-browse-base-url>https://github.com/steff1193/lucene-solr/tree/my_lucene_solr_4_4_0</vc-browse-base-url>
     <base.specification.version>4.4.0</base.specification.version>
     <maven.build.timestamp.format>yyyy-MM-dd HH:mm:ss</maven.build.timestamp.format>
     <java.compat.version>1.6</java.compat.version>
@@ -61,7 +61,7 @@
     <tests.awaitsfix/>
     <tests.slow/>
 
-    <!-- Lucene/Solr-specific test system properties -->
+    <!-- @Lucene-name@/@Solr-name@-specific test system properties -->
     <tests.codec>random</tests.codec>
     <tests.directory>random</tests.directory>
     <tests.locale>random</tests.locale>
@@ -75,48 +75,17 @@
   </properties>
   <issueManagement>
     <system>JIRA</system>
-    <url>https://issues.apache.org/jira/browse/LUCENE</url>
+    <url></url>
   </issueManagement>
   <ciManagement>
     <system>Jenkins</system>
-    <url>https://builds.apache.org/computer/lucene/</url>
+    <url></url>
   </ciManagement>
   <mailingLists>
-    <mailingList>
-      <name>General List</name>
-      <subscribe>general-subscribe@lucene.apache.org</subscribe>
-      <unsubscribe>general-unsubscribe@lucene.apache.org</unsubscribe>
-      <archive>
-        http://mail-archives.apache.org/mod_mbox/lucene-general/
-      </archive>
-    </mailingList>
-    <mailingList>
-      <name>Java User List</name>
-      <subscribe>java-user-subscribe@lucene.apache.org</subscribe>
-      <unsubscribe>java-user-unsubscribe@lucene.apache.org</unsubscribe>
-      <archive>
-        http://mail-archives.apache.org/mod_mbox/lucene-java-user/
-      </archive>
-    </mailingList>
-    <mailingList>
-      <name>Java Developer List</name>
-      <subscribe>dev-subscribe@lucene.apache.org</subscribe>
-      <unsubscribe>dev-unsubscribe@lucene.apache.org</unsubscribe>
-      <archive>http://mail-archives.apache.org/mod_mbox/lucene-dev/</archive>
-    </mailingList>
-    <mailingList>
-      <name>Java Commits List</name>
-      <subscribe>commits-subscribe@lucene.apache.org</subscribe>
-      <unsubscribe>commits-unsubscribe@lucene.apache.org</unsubscribe>
-      <archive>
-        http://mail-archives.apache.org/mod_mbox/lucene-java-commits/
-      </archive>
-    </mailingList>
   </mailingLists>
-  <inceptionYear>2000</inceptionYear>
   <scm>
-    <connection>scm:svn:${vc-anonymous-base-url}</connection>
-    <developerConnection>scm:svn:${vc-dev-base-url}</developerConnection>
+    <connection>scm:git:${vc-anonymous-base-url}</connection>
+    <developerConnection>scm:git:${vc-dev-base-url}</developerConnection>
     <url>${vc-browse-base-url}</url>
   </scm>
   <licenses>
@@ -126,19 +95,6 @@
     </license>
   </licenses>
   <repositories>
-    <repository>
-      <id>apache.snapshots</id>
-      <name>Apache Snapshot Repository</name>
-      <url>http://repository.apache.org/snapshots</url>
-      <releases>
-        <enabled>false</enabled>
-      </releases>
-      <snapshots>
-        <!-- Disable the Apache snapshot repository, overriding declaration in parent Apache POM. -->
-        <enabled>false</enabled>
-        <updatePolicy>never</updatePolicy>
-      </snapshots>
-    </repository>
   </repositories>
   <dependencyManagement>
     <dependencies>
@@ -610,10 +566,10 @@
                 <Specification-Title>${project.name}</Specification-Title>
                 <!-- spec version must match "digit+{.digit+}*" -->
                 <Specification-Version>${base.specification.version}.${now.version}</Specification-Version>
-                <Specification-Vendor>The Apache Software Foundation</Specification-Vendor>
+                <Specification-Vendor>The @company-name@ Software Foundation</Specification-Vendor>
                 <!-- impl version can be any string -->
                 <Implementation-Version>${project.version} ${svn.revision} - ${user.name} - ${now.timestamp}</Implementation-Version>
-                <Implementation-Vendor>The Apache Software Foundation</Implementation-Vendor>
+                <Implementation-Vendor>@company-name@</Implementation-Vendor>
                 <X-Compile-Source-JDK>${java.compat.version}</X-Compile-Source-JDK>
                 <X-Compile-Target-JDK>${java.compat.version}</X-Compile-Target-JDK>
               </manifestEntries>
@@ -660,7 +616,7 @@
               <tests.awaitsfix>${tests.awaitsfix}</tests.awaitsfix>
               <tests.slow>${tests.slow}</tests.slow>
 
-              <!-- Lucene/Solr-specific test system properties -->
+              <!-- @Lucene-name@/@Solr-name@-specific test system properties -->
               <jetty.testMode>1</jetty.testMode>
               <tests.codec>${tests.codec}</tests.codec>
               <tests.directory>${tests.directory}</tests.directory>
@@ -690,10 +646,10 @@
                 <Specification-Title>${project.name}</Specification-Title>
                 <!-- spec version must match "digit+{.digit+}*" -->
                 <Specification-Version>${base.specification.version}.${now.version}</Specification-Version>
-                <Specification-Vendor>The Apache Software Foundation</Specification-Vendor>
+                <Specification-Vendor>The @company-name@ Software Foundation</Specification-Vendor>
                 <!-- impl version can be any string -->
                 <Implementation-Version>${project.version} ${svn.revision} - ${user.name} - ${now.timestamp}</Implementation-Version>
-                <Implementation-Vendor>The Apache Software Foundation</Implementation-Vendor>
+                <Implementation-Vendor>@company-name@</Implementation-Vendor>
                 <X-Compile-Source-JDK>${java.compat.version}</X-Compile-Source-JDK>
                 <X-Compile-Target-JDK>${java.compat.version}</X-Compile-Target-JDK>
               </manifestEntries>

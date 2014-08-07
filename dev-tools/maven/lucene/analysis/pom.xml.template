@@ -21,14 +21,14 @@
   -->
   <modelVersion>4.0.0</modelVersion>
   <parent>
-    <groupId>org.apache.lucene</groupId>
-    <artifactId>lucene-parent</artifactId>
+    <groupId>@lucene-groupId@</groupId>
+    <artifactId>@lucene-name@-parent</artifactId>
     <version>@version@</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
-  <groupId>org.apache.lucene</groupId>
-  <artifactId>lucene-analysis-modules-aggregator</artifactId>
-  <name>Lucene Analysis Modules aggregator POM</name>
+  <groupId>@lucene-groupId@</groupId>
+  <artifactId>@lucene-name@-analysis-modules-aggregator</artifactId>
+  <name>@Lucene-name@ Analysis Modules aggregator POM</name>
   <packaging>pom</packaging>
   <modules>
     <module>common</module>

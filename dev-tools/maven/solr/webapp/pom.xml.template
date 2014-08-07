@@ -21,35 +21,35 @@
   -->
   <modelVersion>4.0.0</modelVersion>
   <parent>
-    <groupId>org.apache.solr</groupId>
-    <artifactId>solr-parent</artifactId>
+    <groupId>@solr-groupId@</groupId>
+    <artifactId>@solr-name@-parent</artifactId>
     <version>@version@</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
-  <groupId>org.apache.solr</groupId>
-  <artifactId>solr</artifactId>
+  <groupId>@solr-groupId@</groupId>
+  <artifactId>@solr-name@</artifactId>
   <packaging>war</packaging>
-  <name>Apache Solr Search Server</name>
-  <description>Apache Solr Search Server</description>
+  <name>@company-name@ @Solr-name@ Search Server</name>
+  <description>@company-name@ @Solr-name@ Search Server</description>
   <properties>
     <module-directory>solr/webapp</module-directory>
     <relative-top-level>../../..</relative-top-level>
     <module-path>${relative-top-level}/${module-directory}</module-path>
   </properties>
   <scm>
-    <connection>scm:svn:${vc-anonymous-base-url}/${module-directory}</connection>
-    <developerConnection>scm:svn:${vc-dev-base-url}/${module-directory}</developerConnection>
+    <connection>scm:git:${vc-anonymous-base-url}/${module-directory}</connection>
+    <developerConnection>scm:git:${vc-dev-base-url}/${module-directory}</developerConnection>
     <url>${vc-browse-base-url}/${module-directory}</url>
   </scm>
   <dependencies>
     <dependency>
       <groupId>${project.groupId}</groupId>
-      <artifactId>solr-core</artifactId>
+      <artifactId>@solr-name@-core</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>${project.groupId}</groupId>
-      <artifactId>solr-solrj</artifactId>
+      <artifactId>@solr-name@-@solr-name@j</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
@@ -72,7 +72,7 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-source-plugin</artifactId>
         <configuration>
-          <!-- There are no sources for the Solr WAR, but    -->
+          <!-- There are no sources for the @Solr-name@ WAR, but    -->
           <!-- the maven-source-plugin has no "skip" option. -->
           <!-- Setting attach=false prevents the built jar   -->
           <!-- from being installed or deployed.             -->

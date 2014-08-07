@@ -21,15 +21,15 @@
   -->
   <modelVersion>4.0.0</modelVersion>
   <parent>
-    <groupId>org.apache.lucene</groupId>
-    <artifactId>lucene-parent</artifactId>
+    <groupId>@lucene-groupId@</groupId>
+    <artifactId>@lucene-name@-parent</artifactId>
     <version>@version@</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
-  <groupId>org.apache.lucene</groupId>
-  <artifactId>lucene-analyzers-morfologik</artifactId>
+  <groupId>@lucene-groupId@</groupId>
+  <artifactId>@lucene-name@-analyzers-morfologik</artifactId>
   <packaging>jar</packaging>
-  <name>Lucene Morfologik Polish Lemmatizer</name>
+  <name>@Lucene-name@ Morfologik Polish Lemmatizer</name>
   <description>
   	 A dictionary-driven lemmatizer for Polish (includes morphosyntactic annotations)
   </description>
@@ -39,26 +39,26 @@
     <module-path>${relative-top-level}/${module-directory}</module-path>
   </properties>
   <scm>
-    <connection>scm:svn:${vc-anonymous-base-url}/${module-directory}</connection>
-    <developerConnection>scm:svn:${vc-dev-base-url}/${module-directory}</developerConnection>
+    <connection>scm:git:${vc-anonymous-base-url}/${module-directory}</connection>
+    <developerConnection>scm:git:${vc-dev-base-url}/${module-directory}</developerConnection>
     <url>${vc-browse-base-url}/${module-directory}</url>
   </scm>
   <dependencies>
     <dependency> 
       <!-- lucene-test-framework dependency must be declared before lucene-core -->
       <groupId>${project.groupId}</groupId>
-      <artifactId>lucene-test-framework</artifactId>
+      <artifactId>@lucene-name@-test-framework</artifactId>
       <version>${project.version}</version>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>${project.groupId}</groupId>
-      <artifactId>lucene-core</artifactId>
+      <artifactId>@lucene-name@-core</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>${project.groupId}</groupId>
-      <artifactId>lucene-analyzers-common</artifactId>
+      <artifactId>@lucene-name@-analyzers-common</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>

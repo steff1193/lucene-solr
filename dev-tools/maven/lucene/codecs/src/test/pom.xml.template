@@ -21,14 +21,14 @@
   -->
   <modelVersion>4.0.0</modelVersion>
   <parent>
-    <groupId>org.apache.lucene</groupId>
-    <artifactId>lucene-parent</artifactId>
+    <groupId>@lucene-groupId@</groupId>
+    <artifactId>@lucene-name@-parent</artifactId>
     <version>@version@</version>
     <relativePath>../../../pom.xml</relativePath>
   </parent>
-  <groupId>org.apache.lucene</groupId>
-  <artifactId>lucene-codecs-tests</artifactId>
-  <name>Lucene codecs tests</name>
+  <groupId>@lucene-groupId@</groupId>
+  <artifactId>@lucene-name@-codecs-tests</artifactId>
+  <name>@Lucene-name@ codecs tests</name>
   <packaging>jar</packaging>
   <properties>
     <module-directory>lucene/codecs</module-directory>
@@ -38,14 +38,14 @@
   <dependencies>
     <dependency>
       <!-- lucene-test-framework dependency must be declared before lucene-core -->
-      <groupId>org.apache.lucene</groupId>
-      <artifactId>lucene-test-framework</artifactId>
+      <groupId>@lucene-groupId@</groupId>
+      <artifactId>@lucene-name@-test-framework</artifactId>
       <version>${project.version}</version>
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>org.apache.lucene</groupId>
-      <artifactId>lucene-codecs</artifactId>
+      <groupId>@lucene-groupId@</groupId>
+      <artifactId>@lucene-name@-codecs</artifactId>
       <version>${project.version}</version>
       <scope>test</scope>
     </dependency>

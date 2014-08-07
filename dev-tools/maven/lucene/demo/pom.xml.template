@@ -21,52 +21,52 @@
   -->
   <modelVersion>4.0.0</modelVersion>
   <parent>
-    <groupId>org.apache.lucene</groupId>
-    <artifactId>lucene-parent</artifactId>
+    <groupId>@lucene-groupId@</groupId>
+    <artifactId>@lucene-name@-parent</artifactId>
     <version>@version@</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
-  <groupId>org.apache.lucene</groupId>
-  <artifactId>lucene-demo</artifactId>
+  <groupId>@lucene-groupId@</groupId>
+  <artifactId>@lucene-name@-demo</artifactId>
   <packaging>jar</packaging>
-  <name>Lucene Demo</name>
-  <description>This is the demo for Apache Lucene Java</description>
+  <name>@Lucene-name@ Demo</name>
+  <description>This is the demo for @company-name@ @Lucene-name@ Java</description>
   <properties>
     <module-directory>lucene/demo</module-directory>
     <relative-top-level>../../..</relative-top-level>
     <module-path>${relative-top-level}/${module-directory}</module-path>
   </properties>
   <scm>
-    <connection>scm:svn:${vc-anonymous-base-url}/${module-directory}</connection>
-    <developerConnection>scm:svn:${vc-dev-base-url}/${module-directory}</developerConnection>
+    <connection>scm:git:${vc-anonymous-base-url}/${module-directory}</connection>
+    <developerConnection>scm:git:${vc-dev-base-url}/${module-directory}</developerConnection>
     <url>${vc-browse-base-url}/${module-directory}</url>
   </scm>
   <dependencies>
     <dependency> 
       <!-- lucene-test-framework dependency must be declared before lucene-core -->
       <groupId>${project.groupId}</groupId>
-      <artifactId>lucene-test-framework</artifactId>
+      <artifactId>@lucene-name@-test-framework</artifactId>
       <version>${project.version}</version>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>${project.groupId}</groupId>
-      <artifactId>lucene-core</artifactId>
+      <artifactId>@lucene-name@-core</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>${project.groupId}</groupId>
-      <artifactId>lucene-analyzers-common</artifactId>
+      <artifactId>@lucene-name@-analyzers-common</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>${project.groupId}</groupId>
-      <artifactId>lucene-facet</artifactId>
+      <artifactId>@lucene-name@-facet</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>${project.groupId}</groupId>
-      <artifactId>lucene-queryparser</artifactId>
+      <artifactId>@lucene-name@-queryparser</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>

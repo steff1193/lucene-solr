@@ -21,24 +21,24 @@
   -->
   <modelVersion>4.0.0</modelVersion>
   <parent>
-    <groupId>org.apache.solr</groupId>
-    <artifactId>solr-parent</artifactId>
+    <groupId>@solr-groupId@</groupId>
+    <artifactId>@solr-name@-parent</artifactId>
     <version>@version@</version>
     <relativePath>../../../pom.xml</relativePath>
   </parent>
-  <groupId>org.apache.solr</groupId>
-  <artifactId>solr-solrj</artifactId>
+  <groupId>@solr-groupId@</groupId>
+  <artifactId>@solr-name@-@solr-name@j</artifactId>
   <packaging>jar</packaging>
-  <name>Apache Solr Solrj</name>
-  <description>Apache Solr Solrj</description>
+  <name>@company-name@ @Solr-name@ @Solr-name@j</name>
+  <description>@company-name@ @Solr-name@ @Solr-name@j</description>
   <properties>
     <module-directory>solr/solrj</module-directory>
     <relative-top-level>../../../../..</relative-top-level>
     <module-path>${relative-top-level}/${module-directory}/src/java</module-path>
   </properties>
   <scm>
-    <connection>scm:svn:${vc-anonymous-base-url}/${module-directory}</connection>
-    <developerConnection>scm:svn:${vc-dev-base-url}/${module-directory}</developerConnection>
+    <connection>scm:git:${vc-anonymous-base-url}/${module-directory}</connection>
+    <developerConnection>scm:git:${vc-dev-base-url}/${module-directory}</developerConnection>
     <url>${vc-browse-base-url}/${module-directory}</url>
   </scm>
   <dependencies>
@@ -87,7 +87,7 @@
     <dependency>
       <groupId>org.apache.httpcomponents</groupId>
       <artifactId>httpclient</artifactId>
-      <!-- HttpSolrServer requires this dependency. -->
+      <!-- Http@Solr-name@Server requires this dependency. -->
       <exclusions>
         <exclusion>
           <groupId>commons-logging</groupId>
@@ -98,9 +98,9 @@
     <dependency>
       <groupId>org.apache.httpcomponents</groupId>
       <artifactId>httpmime</artifactId>
-      <!-- HttpSolrServer requires this dependency. -->
+      <!-- Http@Solr-name@Server requires this dependency. -->
     </dependency>
-    <!-- Technically, this is optional in SolrJ; but it's fast. SOLR-2852 -->
+    <!-- Technically, this is optional in @Solr-name@J; but it's fast. SOLR-2852 -->
     <dependency>
       <groupId>org.codehaus.woodstox</groupId>
       <artifactId>wstx-asl</artifactId>
@@ -155,7 +155,7 @@
               </bundledSignatures>
               <signaturesFiles>
                 <signaturesFile>${top-level}/lucene/tools/forbiddenApis/base.txt</signaturesFile>
-                <!-- Solr-J does NOT depend on servlet-api -->
+                <!-- @Solr-name@-J does NOT depend on servlet-api -->
                 <!-- <signaturesFile>${top-level}/lucene/tools/forbiddenApis/servlet-api.txt</signaturesFile> -->
               </signaturesFiles>
             </configuration>

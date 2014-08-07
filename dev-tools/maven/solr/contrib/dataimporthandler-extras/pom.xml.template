@@ -21,24 +21,24 @@
   -->
   <modelVersion>4.0.0</modelVersion>
   <parent>
-    <groupId>org.apache.solr</groupId>
-    <artifactId>solr-parent</artifactId>
+    <groupId>@solr-groupId@</groupId>
+    <artifactId>@solr-name@-parent</artifactId>
     <version>@version@</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
-  <groupId>org.apache.solr</groupId>
-  <artifactId>solr-dataimporthandler-extras</artifactId>
+  <groupId>@solr-groupId@</groupId>
+  <artifactId>@solr-name@-dataimporthandler-extras</artifactId>
   <packaging>jar</packaging>
-  <name>Apache Solr DataImportHandler Extras</name>
-  <description>Apache Solr DataImportHandler Extras</description>
+  <name>@company-name@ @Solr-name@ DataImportHandler Extras</name>
+  <description>@company-name@ @Solr-name@ DataImportHandler Extras</description>
   <properties>
     <module-directory>solr/contrib/dataimporthandler-extras</module-directory>
     <relative-top-level>../../../..</relative-top-level>
     <module-path>${relative-top-level}/${module-directory}</module-path>
   </properties>
   <scm>
-    <connection>scm:svn:${vc-anonymous-base-url}/${module-directory}</connection>
-    <developerConnection>scm:svn:${vc-dev-base-url}/${module-directory}</developerConnection>
+    <connection>scm:git:${vc-anonymous-base-url}/${module-directory}</connection>
+    <developerConnection>scm:git:${vc-dev-base-url}/${module-directory}</developerConnection>
     <url>${vc-browse-base-url}/${module-directory}</url>
   </scm>
   <dependencies>
@@ -46,30 +46,30 @@
       <!-- lucene-test-framework dependency must be declared before lucene-core -->
       <!-- This dependency cannot be put into solr-parent, because local        -->
       <!-- dependencies are always ordered before inherited dependencies.       -->
-      <groupId>org.apache.lucene</groupId>
-      <artifactId>lucene-test-framework</artifactId>
+      <groupId>@lucene-groupId@</groupId>
+      <artifactId>@lucene-name@-test-framework</artifactId>
       <version>${project.version}</version>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>${project.groupId}</groupId>
-      <artifactId>solr-core</artifactId>
+      <artifactId>@solr-name@-core</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>${project.groupId}</groupId>
-      <artifactId>solr-test-framework</artifactId>
+      <artifactId>@solr-name@-test-framework</artifactId>
       <version>${project.version}</version>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>${project.groupId}</groupId>
-      <artifactId>solr-dataimporthandler</artifactId>
+      <artifactId>@solr-name@-dataimporthandler</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>${project.groupId}</groupId>
-      <artifactId>solr-dataimporthandler</artifactId>
+      <artifactId>@solr-name@-dataimporthandler</artifactId>
       <version>${project.version}</version>
       <type>test-jar</type>
       <scope>test</scope>

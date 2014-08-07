@@ -21,14 +21,14 @@
   -->
   <modelVersion>4.0.0</modelVersion>
   <parent>
-    <groupId>org.apache.solr</groupId>
-    <artifactId>solr-parent</artifactId>
+    <groupId>@solr-groupId@</groupId>
+    <artifactId>@solr-name@-parent</artifactId>
     <version>@version@</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
-  <groupId>org.apache.solr</groupId>
-  <artifactId>solr-contrib-aggregator</artifactId>
-  <name>Apache Solr Contrib aggregator POM</name>
+  <groupId>@solr-groupId@</groupId>
+  <artifactId>@solr-name@-contrib-aggregator</artifactId>
+  <name>@company-name@ @Solr-name@ Contrib aggregator POM</name>
   <packaging>pom</packaging>
   <modules>
     <module>analysis-extras</module>
